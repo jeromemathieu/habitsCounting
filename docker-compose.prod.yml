@@ -1,6 +1,13 @@
-# Déploiement production : application seule.
-# Le port est publié sur 127.0.0.1 uniquement : c'est TON reverse proxy
-# (déjà en place sur le VPS) qui expose l'app au public en HTTPS.
+# Déploiement production derrière Traefik.
+#
+# L'app ne publie AUCUN port : Traefik la joint via le réseau Docker partagé
+# et applique le TLS (HTTPS) selon ta config Traefik existante.
+#
+# >>> 3 valeurs à adapter à TON installation Traefik (cherchées avec "ADAPTER") :
+#   1. le nom du réseau Docker de Traefik   (ex: traefik, proxy, web...)
+#   2. le nom de l'entrypoint HTTPS          (ex: websecure)
+#   3. le nom du certresolver                (ex: letsencrypt, myresolver)
+# Et bien sûr ton domaine dans la règle Host(...).
 #
 # Usage :  docker compose -f docker-compose.prod.yml up -d --build
 services:
@@ -11,11 +18,24 @@ services:
       DB_PATH: /data/data.sqlite
     volumes:
       - habits-data:/data
-    # Accessible seulement en local sur le VPS -> le reverse proxy s'y connecte.
-    # Si ton reverse proxy tourne dans Docker, vois la note du README (réseau partagé).
-    ports:
-      - "127.0.0.1:3000:3000"
     restart: unless-stopped
+    networks:
+      - traefik          # ADAPTER : nom du réseau Traefik
+    labels:
+      - "traefik.enable=true"
+      # ADAPTER : ton domaine
+      - "traefik.http.routers.habits.rule=Host(`habits.tondomaine.com`)"
+      # ADAPTER : entrypoint HTTPS de ta config Traefik
+      - "traefik.http.routers.habits.entrypoints=websecure"
+      - "traefik.http.routers.habits.tls=true"
+      # ADAPTER : nom de ton certresolver
+      - "traefik.http.routers.habits.tls.certresolver=letsencrypt"
+      # Port interne du conteneur (ne pas changer)
+      - "traefik.http.services.habits.loadbalancer.server.port=3000"
+
+networks:
+  traefik:               # ADAPTER : doit correspondre au réseau ci-dessus
+    external: true
 
 volumes:
   habits-data:
