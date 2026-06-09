@@ -1,4 +1,7 @@
-# Déploiement production : application + Caddy (HTTPS automatique).
+# Déploiement production : application seule.
+# Le port est publié sur 127.0.0.1 uniquement : c'est TON reverse proxy
+# (déjà en place sur le VPS) qui expose l'app au public en HTTPS.
+#
 # Usage :  docker compose -f docker-compose.prod.yml up -d --build
 services:
   app:
@@ -8,25 +11,11 @@ services:
       DB_PATH: /data/data.sqlite
     volumes:
       - habits-data:/data
-    restart: unless-stopped
-    # Pas de ports exposés : seul Caddy est accessible depuis l'extérieur.
-    expose:
-      - "3000"
-
-  caddy:
-    image: caddy:2
+    # Accessible seulement en local sur le VPS -> le reverse proxy s'y connecte.
+    # Si ton reverse proxy tourne dans Docker, vois la note du README (réseau partagé).
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      - app
+      - "127.0.0.1:3000:3000"
     restart: unless-stopped
 
 volumes:
   habits-data:
-  caddy-data:
-  caddy-config:
