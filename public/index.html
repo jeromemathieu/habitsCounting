@@ -37,13 +37,16 @@
       <!-- Vue Calendrier (saisie par habitude) -->
       <section id="view-calendar" class="view">
         <select id="calendar-habit" class="habit-select"></select>
-        <div class="date-bar">
-          <button id="cal-prev-month" class="nav-btn" aria-label="Mois précédent">‹</button>
-          <span id="cal-month-label" class="cal-month-label"></span>
-          <button id="cal-next-month" class="nav-btn" aria-label="Mois suivant">›</button>
+        <div class="calendar-card" id="calendar-card">
+          <div class="cal-nav">
+            <button id="cal-prev-month" class="nav-btn" aria-label="Mois précédent">‹</button>
+            <span id="cal-month-label" class="cal-month-label"></span>
+            <button id="cal-next-month" class="nav-btn" aria-label="Mois suivant">›</button>
+          </div>
+          <div id="cal-stats" class="cal-stats"></div>
+          <div id="calendar-grid" class="calendar-grid"></div>
+          <div class="cal-legend" id="cal-legend"></div>
         </div>
-        <div id="calendar-grid" class="calendar-grid"></div>
-        <p class="cal-hint" id="cal-hint"></p>
         <p id="calendar-empty" class="empty hidden">
           Aucune habitude. Ajoute-en dans l'onglet « Mes habitudes ».
         </p>

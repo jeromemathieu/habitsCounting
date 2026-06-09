@@ -157,12 +157,8 @@ async function renderCalendar() {
 
   const sel = $("#calendar-habit");
   sel.style.display = habits.length ? "" : "none";
-  if (!habits.length) {
-    $("#calendar-grid").innerHTML = "";
-    $("#cal-month-label").textContent = "";
-    $("#cal-hint").textContent = "";
-    return;
-  }
+  $("#calendar-card").style.display = habits.length ? "" : "none";
+  if (!habits.length) return;
 
   // (Re)remplit la liste déroulante d'habitudes
   if (calHabitId === null || !habits.some((h) => h.id === calHabitId)) {
@@ -188,6 +184,7 @@ async function drawCalendar() {
   const done = new Set(data.dates);
   const mask = data.days;
   const today = toISODate(new Date());
+  const color = getHabitColor();
 
   const grid = $("#calendar-grid");
   grid.innerHTML = "";
@@ -210,23 +207,34 @@ async function drawCalendar() {
   }
 
   const daysInMonth = new Date(y, m, 0).getDate();
-  const color = getHabitColor();
+  let scheduledCount = 0;
+  let doneScheduled = 0;
   for (let d = 1; d <= daysInMonth; d++) {
     const iso = `${calMonth}-${String(d).padStart(2, "0")}`;
     const dow = new Date(y, m - 1, d).getDay();
     const isDone = done.has(iso);
     const scheduled = mask[dow] === "1";
+    if (scheduled) scheduledCount++;
+    if (scheduled && isDone) doneScheduled++;
 
     const cell = document.createElement("div");
     cell.className = "cal-cell";
-    if (!scheduled) cell.classList.add("off");
     if (scheduled) cell.classList.add("scheduled");
+    else cell.classList.add("off");
     if (iso === today) cell.classList.add("today");
     if (isDone) {
       cell.classList.add("done");
       cell.style.background = color;
     }
-    cell.textContent = d;
+
+    const num = document.createElement("span");
+    num.className = "cal-num";
+    num.textContent = d;
+    const dot = document.createElement("span");
+    dot.className = "cal-dot";
+    if (scheduled && !isDone) dot.style.background = color; // point « jour prévu »
+    cell.append(num, dot);
+
     cell.title = scheduled ? "Jour prévu" : "Jour non prévu";
     cell.addEventListener("click", async () => {
       await api("/api/logs/toggle", {
@@ -238,8 +246,19 @@ async function drawCalendar() {
     grid.appendChild(cell);
   }
 
-  $("#cal-hint").textContent =
-    "Clique sur un jour pour le cocher. Les jours soulignés sont les jours prévus de l'habitude.";
+  // Stats du mois : jours prévus réalisés
+  const pct = scheduledCount ? Math.round((doneScheduled / scheduledCount) * 100) : 0;
+  $("#cal-stats").innerHTML = `
+    <div class="cal-progress"><span style="width:${pct}%;background:${color}"></span></div>
+    <span class="cal-stats-text"><b>${doneScheduled}</b> / ${scheduledCount} jours prévus · ${pct}%</span>
+  `;
+
+  // Légende
+  $("#cal-legend").innerHTML = `
+    <span><i class="lg-swatch" style="background:${color}"></i> Réalisé</span>
+    <span><i class="lg-dot" style="background:${color}"></i> Jour prévu</span>
+    <span><i class="lg-swatch" style="background:var(--bg);border:1.5px solid var(--primary)"></i> Aujourd'hui</span>
+  `;
 }
 
 // Couleur de l'habitude sélectionnée.

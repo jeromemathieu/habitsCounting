@@ -324,52 +324,142 @@ main {
 /* Calendar view */
 .habit-select {
   width: 100%;
-  padding: 0.6rem 0.75rem;
+  padding: 0.65rem 0.85rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 1rem;
   background: var(--card);
   color: var(--text);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+}
+.calendar-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1rem 1rem 1.25rem;
+}
+.cal-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 .cal-month-label {
   flex: 1;
   text-align: center;
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 1.05rem;
   text-transform: capitalize;
 }
+
+/* Barre de progression du mois */
+.cal-stats {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.9rem 0 0.4rem;
+}
+.cal-stats .cal-progress {
+  flex: 1;
+  height: 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.cal-stats .cal-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.25s ease;
+}
+.cal-stats .cal-stats-text {
+  font-size: 0.85rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.cal-stats .cal-stats-text b { color: var(--text); }
+
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 0.4rem;
-  margin-top: 0.5rem;
+  gap: 6px;
+  margin-top: 0.6rem;
 }
 .cal-head {
   text-align: center;
-  font-size: 0.8rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
   color: var(--muted);
-  font-weight: 600;
-  padding: 0.2rem 0;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding-bottom: 0.2rem;
 }
 .cal-cell {
   aspect-ratio: 1 / 1;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card);
+  border-radius: 10px;
+  background: var(--bg);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
   font-size: 0.95rem;
+  color: var(--text);
   cursor: pointer;
-  position: relative;
   user-select: none;
+  border: 1.5px solid transparent;
+  transition: transform 0.06s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
-.cal-cell.empty { border: none; background: none; cursor: default; }
-.cal-cell.off { background: var(--bg); color: var(--muted); }
-.cal-cell.scheduled { box-shadow: inset 0 -3px 0 var(--border); }
-.cal-cell.done { color: #fff; font-weight: 600; border-color: transparent; }
-.cal-cell.today { outline: 2px solid var(--primary); outline-offset: -2px; }
-.cal-hint { color: var(--muted); font-size: 0.85rem; margin-top: 0.75rem; }
+.cal-cell:hover:not(.empty) {
+  box-shadow: 0 0 0 2px var(--border);
+}
+.cal-cell:active:not(.empty) { transform: scale(0.93); }
+.cal-cell .cal-num { line-height: 1; }
+.cal-cell .cal-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: transparent;
+}
+.cal-cell.empty { background: none; cursor: default; }
+.cal-cell.off {
+  background: transparent;
+  color: #c2c7d0;
+}
+/* Jour prévu (non fait) : petit point coloré sous le numéro */
+.cal-cell.scheduled .cal-dot { background: currentColor; }
+.cal-cell.scheduled { color: var(--text); }
+/* Jour réalisé : pastille pleine à la couleur de l'habitude */
+.cal-cell.done {
+  color: #fff;
+  font-weight: 700;
+  border-color: transparent;
+}
+.cal-cell.done .cal-dot { background: rgba(255, 255, 255, 0.85); }
+.cal-cell.today { border-color: var(--primary); }
+
+/* Légende */
+.cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.cal-legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.cal-legend .lg-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 5px;
+  display: inline-block;
+}
+.cal-legend .lg-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
 
 /* Manage view */
 .habit-form {
