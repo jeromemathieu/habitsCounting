@@ -19,8 +19,6 @@ services:
     volumes:
       - habits-data:/data
     restart: unless-stopped
-    networks:
-      - traefik          # ADAPTER : nom du réseau Traefik
     labels:
       - "traefik.enable=true"
       # ADAPTER : ton domaine
@@ -32,10 +30,6 @@ services:
       - "traefik.http.routers.habits.tls.certresolver=letsencrypt"
       # Port interne du conteneur (ne pas changer)
       - "traefik.http.services.habits.loadbalancer.server.port=3000"
-
-networks:
-  traefik:               # ADAPTER : doit correspondre au réseau ci-dessus
-    external: true
 
 volumes:
   habits-data:
