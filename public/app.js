@@ -564,19 +564,10 @@ const referenceLinePlugin = {
 };
 if (typeof Chart !== "undefined") Chart.register(referenceLinePlugin);
 
-function drawChart() {
-  const wrap = $("#chart-wrap");
-  const showMessage = (msg) => {
-    if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
-    wrap.innerHTML = `<div class="chart-empty">${msg}</div>`;
-  };
-
-  if (!trendsCache || trendsCache.habits.length === 0) return showMessage("Aucune donnée.");
-  const shown = trendsCache.habits.filter((h) => selectedHabits.has(h.id));
-  if (shown.length === 0) return showMessage("Sélectionne au moins une habitude.");
-
-  const isRate = chartMode === "rate";
-  const isStacked = chartMode === "stacked";
+// Construit la config Chart.js pour des données de trends et un mode donné.
+function trendsChartConfig(shown, mode) {
+  const isRate = mode === "rate";
+  const isStacked = mode === "stacked";
   const valOf = (h, i) =>
     isRate
       ? (h.scheduled[i] ? Math.round((h.monthlyScheduled[i] / h.scheduled[i]) * 100) : 0)
@@ -619,16 +610,10 @@ function drawChart() {
         color: cssVar("--muted") || "#6b7280",
       };
 
-  // Couleurs d'axes selon le thème
   const tickColor = cssVar("--muted") || "#6b7280";
   const gridColor = cssVar("--border") || "#e5e7eb";
 
-  // (Re)crée le canvas
-  if (!$("#chart-canvas")) wrap.innerHTML = '<canvas id="chart-canvas"></canvas>';
-  const ctx = $("#chart-canvas");
-
-  if (chartInstance) chartInstance.destroy();
-  chartInstance = new Chart(ctx, {
+  return {
     type: isStacked ? "bar" : "line",
     data: { labels: MONTHS_FR, datasets },
     options: {
@@ -646,25 +631,42 @@ function drawChart() {
         },
       },
       scales: {
-        x: {
-          stacked: isStacked,
-          grid: { display: false },
-          ticks: { color: tickColor },
-        },
+        x: { stacked: isStacked, grid: { display: false }, ticks: { color: tickColor } },
         y: {
           stacked: isStacked,
           beginAtZero: true,
           ...(isRate ? { max: 100 } : {}),
           grid: { color: gridColor },
-          ticks: {
-            color: tickColor,
-            precision: 0,
-            callback: (v) => (isRate ? v + " %" : v),
-          },
+          ticks: { color: tickColor, precision: 0, callback: (v) => (isRate ? v + " %" : v) },
         },
       },
     },
-  });
+  };
+}
+
+// Dessine un graphique de trends dans `wrapEl`. L'instance Chart est mémorisée
+// sur l'élément (wrapEl._chart) pour pouvoir être détruite au prochain rendu.
+function renderTrendsChart(wrapEl, trends, selectedSet, mode) {
+  const showMessage = (msg) => {
+    if (wrapEl._chart) { wrapEl._chart.destroy(); wrapEl._chart = null; }
+    wrapEl.innerHTML = `<div class="chart-empty">${msg}</div>`;
+  };
+  if (!trends || trends.habits.length === 0) return showMessage("Aucune donnée.");
+  const shown = trends.habits.filter((h) => selectedSet.has(h.id));
+  if (shown.length === 0) return showMessage("Sélectionne au moins une habitude.");
+
+  let canvas = wrapEl.querySelector("canvas");
+  if (!canvas) {
+    wrapEl.innerHTML = "<canvas></canvas>";
+    canvas = wrapEl.querySelector("canvas");
+  }
+  if (wrapEl._chart) wrapEl._chart.destroy();
+  wrapEl._chart = new Chart(canvas, trendsChartConfig(shown, mode));
+}
+
+function drawChart() {
+  renderTrendsChart($("#chart-wrap"), trendsCache, selectedHabits || new Set(), chartMode);
+  chartInstance = $("#chart-wrap")._chart; // pour le re-render au changement de thème
 }
 
 // Sélecteur de mode du graphique
@@ -698,6 +700,8 @@ async function renderShared() {
   $("#shared-content").innerHTML = "";
   if (!owners.length) {
     sharedOwnerId = null;
+    $("#shared-cal-block").classList.add("hidden");
+    $("#shared-chart-block").classList.add("hidden");
     return;
   }
   if (sharedOwnerId === null || !owners.some((o) => o.id === sharedOwnerId)) {
@@ -711,7 +715,14 @@ async function renderShared() {
     if (o.id === sharedOwnerId) opt.selected = true;
     sel.appendChild(opt);
   }
+  await loadSharedOwner();
+}
+
+// Charge toutes les sections (jour, calendrier, synthèse) du propriétaire choisi.
+async function loadSharedOwner() {
   await drawShared();
+  await renderSharedCalendar();
+  await renderSharedChart();
 }
 
 async function drawShared() {
@@ -758,8 +769,209 @@ async function drawShared() {
 
 $("#shared-owner").addEventListener("change", (e) => {
   sharedOwnerId = Number(e.target.value);
-  drawShared();
+  // Réinitialise l'état des sous-vues pour le nouveau propriétaire
+  sharedCalHabitId = null;
+  sharedSelectedHabits = null;
+  loadSharedOwner();
 });
+
+// --- Calendrier partagé (lecture seule) ---
+let sharedCalHabitId = null;
+let sharedCalMonth = currentMonth;
+let sharedCalHabits = [];
+
+async function renderSharedCalendar() {
+  const habits = await api(`/api/habits?owner=${sharedOwnerId}`);
+  sharedCalHabits = habits;
+  const block = $("#shared-cal-block");
+  if (!habits.length) {
+    block.classList.add("hidden");
+    return;
+  }
+  block.classList.remove("hidden");
+  if (sharedCalHabitId === null || !habits.some((h) => h.id === sharedCalHabitId)) {
+    sharedCalHabitId = habits[0].id;
+  }
+  const sel = $("#shared-cal-habit");
+  sel.innerHTML = "";
+  for (const h of habits) {
+    const o = document.createElement("option");
+    o.value = h.id;
+    o.textContent = h.name;
+    if (h.id === sharedCalHabitId) o.selected = true;
+    sel.appendChild(o);
+  }
+  await drawSharedCalendar();
+}
+
+async function drawSharedCalendar() {
+  const [y, m] = sharedCalMonth.split("-").map(Number);
+  $("#shared-cal-label").textContent = frMonth(sharedCalMonth);
+  const data = await api(
+    `/api/habits/${sharedCalHabitId}/calendar?month=${sharedCalMonth}&owner=${sharedOwnerId}`
+  );
+  const done = new Set(data.dates);
+  const notes = data.notes || {};
+  const mask = data.days;
+  const start = data.start_date;
+  const end = data.end_date;
+  const today = toISODate(new Date());
+  const color = (sharedCalHabits.find((h) => h.id === sharedCalHabitId) || {}).color || "#4f46e5";
+
+  const head = $("#shared-cal-weekdays");
+  head.innerHTML = "";
+  for (const { label } of WEEKDAYS) {
+    const d = document.createElement("div");
+    d.className = "cal-head";
+    d.textContent = label;
+    head.appendChild(d);
+  }
+
+  const grid = $("#shared-cal-grid");
+  grid.innerHTML = "";
+  const firstDow = new Date(y, m - 1, 1).getDay();
+  const lead = (firstDow + 6) % 7;
+  for (let i = 0; i < lead; i++) {
+    const e = document.createElement("div");
+    e.className = "cal-cell empty";
+    grid.appendChild(e);
+  }
+
+  const daysInMonth = new Date(y, m, 0).getDate();
+  let sc = 0, ds = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const iso = `${sharedCalMonth}-${String(d).padStart(2, "0")}`;
+    const dow = new Date(y, m - 1, d).getDay();
+    const isDone = done.has(iso);
+    const outRange = (start && iso < start) || (end && iso > end);
+    const scheduled = mask[dow] === "1" && !outRange;
+    if (scheduled) sc++;
+    if (scheduled && isDone) ds++;
+
+    const cell = document.createElement("div");
+    cell.className = "cal-cell";
+    if (outRange) cell.classList.add("out");
+    if (scheduled) cell.classList.add("scheduled");
+    else cell.classList.add("off");
+    if (iso === today) cell.classList.add("today");
+    if (notes[iso]) cell.classList.add("has-note");
+    if (isDone) {
+      cell.classList.add("done");
+      cell.style.background = color;
+    }
+    const num = document.createElement("span");
+    num.className = "cal-num";
+    num.textContent = d;
+    const dot = document.createElement("span");
+    dot.className = "cal-dot";
+    if (scheduled && !isDone) dot.style.background = color;
+    cell.append(num, dot);
+
+    if (notes[iso]) {
+      cell.style.cursor = "pointer";
+      cell.title = "Voir le commentaire";
+      cell.addEventListener("click", () => {
+        const nv = $("#shared-cal-noteview");
+        nv.classList.remove("hidden");
+        nv.innerHTML = `<strong>${frDate(iso)}</strong><br>${escapeHtml(notes[iso])}`;
+      });
+    }
+    grid.appendChild(cell);
+  }
+
+  const pct = sc ? Math.round((ds / sc) * 100) : 0;
+  $("#shared-cal-stats").innerHTML = `
+    <div class="cal-progress"><span style="width:${pct}%;background:${color}"></span></div>
+    <span class="cal-stats-text"><b>${ds}</b> / ${sc} jours prévus · ${pct}%</span>`;
+  $("#shared-cal-legend").innerHTML = `
+    <span><i class="lg-swatch" style="background:${color}"></i> Réalisé</span>
+    <span><i class="lg-dot" style="background:${color}"></i> Jour prévu</span>
+    <span><i class="lg-note">💬</i> Commentaire (cliquer)</span>`;
+  $("#shared-cal-noteview").classList.add("hidden");
+}
+
+$("#shared-cal-habit").addEventListener("change", (e) => {
+  sharedCalHabitId = Number(e.target.value);
+  drawSharedCalendar();
+});
+$("#shared-cal-prev").addEventListener("click", () => shiftSharedCalMonth(-1));
+$("#shared-cal-next").addEventListener("click", () => shiftSharedCalMonth(1));
+function shiftSharedCalMonth(delta) {
+  const [y, m] = sharedCalMonth.split("-").map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  sharedCalMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  drawSharedCalendar();
+}
+
+// --- Synthèse partagée (lecture seule) ---
+let sharedYear = currentYear;
+let sharedChartMode = "count";
+let sharedSelectedHabits = null;
+let sharedTrends = null;
+let sharedKnownIds = new Set();
+
+async function renderSharedChart() {
+  $("#shared-year").value = sharedYear;
+  const data = await api(`/api/trends?year=${sharedYear}&owner=${sharedOwnerId}`);
+  sharedTrends = data;
+  const block = $("#shared-chart-block");
+  if (!data.habits.length) {
+    block.classList.add("hidden");
+    return;
+  }
+  block.classList.remove("hidden");
+
+  const ids = new Set(data.habits.map((h) => h.id));
+  if (sharedSelectedHabits === null) {
+    sharedSelectedHabits = new Set(ids);
+  } else {
+    for (const id of [...sharedSelectedHabits]) if (!ids.has(id)) sharedSelectedHabits.delete(id);
+    for (const id of ids) if (!sharedKnownIds.has(id)) sharedSelectedHabits.add(id);
+    if (!sharedSelectedHabits.size) sharedSelectedHabits = new Set(ids);
+  }
+  sharedKnownIds = ids;
+
+  renderSharedFilter(data.habits);
+  renderTrendsChart($("#shared-chart-wrap"), sharedTrends, sharedSelectedHabits, sharedChartMode);
+}
+
+function renderSharedFilter(habits) {
+  const wrap = $("#shared-habit-filter");
+  wrap.innerHTML = "";
+  for (const h of habits) {
+    const active = sharedSelectedHabits.has(h.id);
+    const chip = document.createElement("button");
+    chip.className = "filter-chip" + (active ? " active" : "");
+    chip.innerHTML = `<span class="chip-dot" style="background:${active ? h.color : "var(--border)"}"></span>${escapeHtml(h.name)}`;
+    chip.style.borderColor = active ? h.color : "";
+    chip.addEventListener("click", () => {
+      if (sharedSelectedHabits.has(h.id)) sharedSelectedHabits.delete(h.id);
+      else sharedSelectedHabits.add(h.id);
+      if (!sharedSelectedHabits.size) sharedSelectedHabits.add(h.id);
+      renderSharedFilter(habits);
+      renderTrendsChart($("#shared-chart-wrap"), sharedTrends, sharedSelectedHabits, sharedChartMode);
+    });
+    wrap.appendChild(chip);
+  }
+}
+
+document.querySelectorAll("#shared-chart-modes .mode-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#shared-chart-modes .mode-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    sharedChartMode = btn.dataset.mode;
+    renderTrendsChart($("#shared-chart-wrap"), sharedTrends, sharedSelectedHabits, sharedChartMode);
+  });
+});
+$("#shared-year").addEventListener("change", (e) => {
+  const v = parseInt(e.target.value, 10);
+  if (!Number.isNaN(v)) {
+    sharedYear = v;
+    renderSharedChart();
+  }
+});
+$("#shared-year-prev").addEventListener("click", () => { sharedYear--; renderSharedChart(); });
+$("#shared-year-next").addEventListener("click", () => { sharedYear++; renderSharedChart(); });
 
 // --- Gestion des partages (qui peut voir mes habitudes) ---
 async function renderShares() {

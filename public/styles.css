@@ -825,6 +825,15 @@ main {
   letter-spacing: 0.03em;
 }
 .shared-sub:first-child { margin-top: 0.5rem; }
+.shared-noteview {
+  margin-top: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+.shared-noteview.hidden { display: none; }
 
 /* --- Mobile --- */
 @media (max-width: 560px) {

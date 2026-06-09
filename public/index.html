@@ -113,6 +113,42 @@
       <section id="view-shared" class="view">
         <select id="shared-owner" class="habit-select"></select>
         <div id="shared-content"></div>
+
+        <!-- Calendrier (lecture seule) -->
+        <div id="shared-cal-block" class="hidden">
+          <p class="shared-sub">Calendrier</p>
+          <select id="shared-cal-habit" class="habit-select"></select>
+          <div class="calendar-card">
+            <div class="cal-nav">
+              <button id="shared-cal-prev" class="nav-btn" aria-label="Mois précédent">‹</button>
+              <span id="shared-cal-label" class="cal-month-label"></span>
+              <button id="shared-cal-next" class="nav-btn" aria-label="Mois suivant">›</button>
+            </div>
+            <div id="shared-cal-stats" class="cal-stats"></div>
+            <div id="shared-cal-weekdays" class="cal-weekdays"></div>
+            <div id="shared-cal-grid" class="calendar-grid"></div>
+            <div id="shared-cal-noteview" class="shared-noteview hidden"></div>
+            <div id="shared-cal-legend" class="cal-legend"></div>
+          </div>
+        </div>
+
+        <!-- Synthèse (lecture seule) -->
+        <div id="shared-chart-block" class="hidden">
+          <p class="shared-sub">Synthèse</p>
+          <div class="date-bar">
+            <button id="shared-year-prev" class="nav-btn" aria-label="Année précédente">‹</button>
+            <input type="number" id="shared-year" min="2000" max="2100" step="1" />
+            <button id="shared-year-next" class="nav-btn" aria-label="Année suivante">›</button>
+          </div>
+          <div class="chart-modes" id="shared-chart-modes">
+            <button class="mode-btn active" data-mode="count">Nombre</button>
+            <button class="mode-btn" data-mode="rate">Taux %</button>
+            <button class="mode-btn" data-mode="stacked">Cumulé</button>
+          </div>
+          <div id="shared-habit-filter" class="habit-filter"></div>
+          <div id="shared-chart-wrap" class="chart-wrap"></div>
+        </div>
+
         <p id="shared-empty" class="empty hidden">
           Personne ne partage ses habitudes avec toi pour l'instant.
         </p>

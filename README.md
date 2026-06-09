@@ -10,7 +10,8 @@ Application web pour **noter chaque jour les actions réalisées** et obtenir un
   cookie httpOnly, mots de passe hachés (scrypt).
 - **Partage en lecture** : partager la consultation de ses habitudes avec un
   autre utilisateur (par email) ; il les voit en lecture seule dans l'onglet
-  « Partagé ». Les écritures restent toujours limitées à ses propres données.
+  « Partagé » (statut du jour, récap mensuel, calendrier et synthèse). Les
+  écritures restent toujours limitées à ses propres données.
 - **Mes habitudes** : créer, renommer, recolorer et supprimer tes habitudes.
 - **Jour** : cocher d'un clic les habitudes réalisées, naviguer entre les jours.
 - **Récap mensuel** : nombre d'actions cochées, régularité moyenne, et une barre
