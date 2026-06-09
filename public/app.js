@@ -34,11 +34,48 @@ const frMonth = (ym) => {
   });
 };
 
+// Jours de la semaine, ordre d'affichage lundi→dimanche.
+// `idx` = valeur getDay() (0=dimanche … 6=samedi) = position dans le masque.
+const WEEKDAYS = [
+  { idx: 1, label: "L" }, { idx: 2, label: "M" }, { idx: 3, label: "M" },
+  { idx: 4, label: "J" }, { idx: 5, label: "V" }, { idx: 6, label: "S" },
+  { idx: 0, label: "D" },
+];
+
+// Construit un sélecteur de jours dans `container` à partir d'un masque "1111111".
+// Le masque courant est stocké dans container.dataset.mask. `onChange(mask)` optionnel.
+function buildDaysPicker(container, mask, onChange) {
+  container.dataset.mask = mask;
+  container.innerHTML = "";
+  for (const { idx, label } of WEEKDAYS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "day-toggle" + (mask[idx] === "1" ? " on" : "");
+    b.textContent = label;
+    b.addEventListener("click", () => {
+      const m = container.dataset.mask.split("");
+      m[idx] = m[idx] === "1" ? "0" : "1";
+      if (!m.includes("1")) return; // garder au moins un jour
+      container.dataset.mask = m.join("");
+      b.classList.toggle("on");
+      if (onChange) onChange(container.dataset.mask);
+    });
+    container.appendChild(b);
+  }
+}
+
+// Convertit un masque "1111111" en tableau d'index [0..6] pour l'API.
+const maskToDays = (mask) =>
+  mask.split("").map((c, i) => (c === "1" ? i : -1)).filter((i) => i >= 0);
+
 // --- State ---
 let currentDate = toISODate(new Date());
 let currentMonth = currentDate.slice(0, 7);
 let currentYear = new Date().getFullYear();
 let selectedHabits = null; // Set d'ids affichés dans la synthèse (null = tous)
+let chartMode = "count"; // count | rate | stacked
+let calHabitId = null; // habitude sélectionnée dans le calendrier
+let calMonth = currentMonth; // mois affiché dans le calendrier
 
 // --- Tabs ---
 document.querySelectorAll(".tab").forEach((tab) => {
@@ -49,6 +86,7 @@ document.querySelectorAll(".tab").forEach((tab) => {
     const view = tab.dataset.view;
     $("#view-" + view).classList.add("active");
     if (view === "day") renderDay();
+    if (view === "calendar") renderCalendar();
     if (view === "month") renderMonth();
     if (view === "synthese") renderSynthese();
     if (view === "manage") renderManage();
@@ -109,6 +147,121 @@ function shiftDay(delta) {
   renderDay();
 }
 
+// --- Calendar view (saisie par habitude) ---
+let calHabits = []; // cache des habitudes (pour la couleur du jour coché)
+
+async function renderCalendar() {
+  const habits = await api("/api/habits");
+  calHabits = habits;
+  $("#calendar-empty").classList.toggle("hidden", habits.length > 0);
+
+  const sel = $("#calendar-habit");
+  sel.style.display = habits.length ? "" : "none";
+  if (!habits.length) {
+    $("#calendar-grid").innerHTML = "";
+    $("#cal-month-label").textContent = "";
+    $("#cal-hint").textContent = "";
+    return;
+  }
+
+  // (Re)remplit la liste déroulante d'habitudes
+  if (calHabitId === null || !habits.some((h) => h.id === calHabitId)) {
+    calHabitId = habits[0].id;
+  }
+  sel.innerHTML = "";
+  for (const h of habits) {
+    const opt = document.createElement("option");
+    opt.value = h.id;
+    opt.textContent = h.name;
+    if (h.id === calHabitId) opt.selected = true;
+    sel.appendChild(opt);
+  }
+
+  await drawCalendar();
+}
+
+async function drawCalendar() {
+  const [y, m] = calMonth.split("-").map(Number);
+  $("#cal-month-label").textContent = frMonth(calMonth);
+
+  const data = await api(`/api/habits/${calHabitId}/calendar?month=${calMonth}`);
+  const done = new Set(data.dates);
+  const mask = data.days;
+  const today = toISODate(new Date());
+
+  const grid = $("#calendar-grid");
+  grid.innerHTML = "";
+
+  // En-têtes L M M J V S D
+  for (const { label } of WEEKDAYS) {
+    const h = document.createElement("div");
+    h.className = "cal-head";
+    h.textContent = label;
+    grid.appendChild(h);
+  }
+
+  // Cases vides avant le 1er (lundi en première colonne)
+  const firstDow = new Date(y, m - 1, 1).getDay(); // 0=dim..6=sam
+  const lead = (firstDow + 6) % 7; // décalage avec lundi en tête
+  for (let i = 0; i < lead; i++) {
+    const e = document.createElement("div");
+    e.className = "cal-cell empty";
+    grid.appendChild(e);
+  }
+
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const color = getHabitColor();
+  for (let d = 1; d <= daysInMonth; d++) {
+    const iso = `${calMonth}-${String(d).padStart(2, "0")}`;
+    const dow = new Date(y, m - 1, d).getDay();
+    const isDone = done.has(iso);
+    const scheduled = mask[dow] === "1";
+
+    const cell = document.createElement("div");
+    cell.className = "cal-cell";
+    if (!scheduled) cell.classList.add("off");
+    if (scheduled) cell.classList.add("scheduled");
+    if (iso === today) cell.classList.add("today");
+    if (isDone) {
+      cell.classList.add("done");
+      cell.style.background = color;
+    }
+    cell.textContent = d;
+    cell.title = scheduled ? "Jour prévu" : "Jour non prévu";
+    cell.addEventListener("click", async () => {
+      await api("/api/logs/toggle", {
+        method: "POST",
+        body: JSON.stringify({ habit_id: calHabitId, date: iso }),
+      });
+      drawCalendar();
+    });
+    grid.appendChild(cell);
+  }
+
+  $("#cal-hint").textContent =
+    "Clique sur un jour pour le cocher. Les jours soulignés sont les jours prévus de l'habitude.";
+}
+
+// Couleur de l'habitude sélectionnée.
+function getHabitColor() {
+  const h = calHabits.find((x) => x.id === calHabitId);
+  return h ? h.color : "#4f46e5";
+}
+
+$("#calendar-habit").addEventListener("change", async (e) => {
+  calHabitId = Number(e.target.value);
+  await drawCalendar();
+});
+$("#cal-prev-month").addEventListener("click", () => shiftCalMonth(-1));
+$("#cal-next-month").addEventListener("click", () => shiftCalMonth(1));
+
+function shiftCalMonth(delta) {
+  const [y, m] = calMonth.split("-").map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  calMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  drawCalendar();
+}
+
 // --- Month view ---
 async function renderMonth() {
   $("#month-picker").value = currentMonth;
@@ -135,7 +288,7 @@ async function renderMonth() {
       <div class="top">
         <span class="dot" style="background:${h.color}"></span>
         <span class="name">${escapeHtml(h.name)}</span>
-        <span class="count">${h.count} / ${data.daysInMonth} j · ${h.rate}%</span>
+        <span class="count">${h.count} / ${h.scheduled} j prévus · ${h.rate}%</span>
       </div>
       <div class="bar"><span style="width:${h.rate}%;background:${h.color}"></span></div>
     `;
@@ -211,47 +364,95 @@ function drawChart() {
     return;
   }
   const shown = trendsCache.habits.filter((h) => selectedHabits.has(h.id));
+  if (shown.length === 0) {
+    wrap.innerHTML = '<div class="chart-empty">Sélectionne au moins une habitude.</div>';
+    return;
+  }
 
   // Géométrie
   const W = 900, H = 380;
-  const padL = 40, padR = 16, padT = 20, padB = 36;
+  const padL = 44, padR = 16, padT = 20, padB = 36;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
-
-  const maxVal = Math.max(1, ...shown.flatMap((h) => h.monthly));
-  // Échelle Y arrondie à un palier lisible
-  const step = Math.max(1, Math.ceil(maxVal / 5));
-  const yMax = step * 5;
-
   const x = (i) => padL + (plotW * i) / 11;
+
+  const isRate = chartMode === "rate";
+  const isStacked = chartMode === "stacked";
+
+  // Valeur affichée par habitude/mois selon le mode
+  const valOf = (h, i) =>
+    isRate ? (h.scheduled[i] ? Math.round((h.monthly[i] / h.scheduled[i]) * 100) : 0) : h.monthly[i];
+
+  // Échelle Y
+  let yMax;
+  if (isRate) {
+    yMax = 100;
+  } else if (isStacked) {
+    const totals = Array.from({ length: 12 }, (_, i) =>
+      shown.reduce((s, h) => s + h.monthly[i], 0));
+    const maxVal = Math.max(1, ...totals);
+    yMax = Math.max(5, Math.ceil(maxVal / 5) * 5);
+  } else {
+    const maxVal = Math.max(1, ...shown.flatMap((h) => h.monthly));
+    yMax = Math.max(5, Math.ceil(maxVal / 5) * 5);
+  }
   const y = (v) => padT + plotH - (plotH * v) / yMax;
 
   let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Évolution mensuelle">`;
 
   // Grille horizontale + labels Y
   for (let g = 0; g <= 5; g++) {
-    const val = (yMax / 5) * g;
+    const val = Math.round((yMax / 5) * g);
     const gy = y(val);
     svg += `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="#e5e7eb" stroke-width="1"/>`;
-    svg += `<text x="${padL - 8}" y="${gy + 4}" font-size="11" fill="#6b7280" text-anchor="end">${val}</text>`;
+    svg += `<text x="${padL - 8}" y="${gy + 4}" font-size="11" fill="#6b7280" text-anchor="end">${val}${isRate ? "%" : ""}</text>`;
   }
   // Labels X (mois)
   for (let i = 0; i < 12; i++) {
     svg += `<text x="${x(i)}" y="${H - 12}" font-size="11" fill="#6b7280" text-anchor="middle">${MONTHS_FR[i]}</text>`;
   }
 
-  // Une ligne + points par habitude
-  for (const h of shown) {
-    const pts = h.monthly.map((v, i) => `${x(i)},${y(v)}`).join(" ");
-    svg += `<polyline points="${pts}" fill="none" stroke="${h.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
-    h.monthly.forEach((v, i) => {
-      svg += `<circle cx="${x(i)}" cy="${y(v)}" r="3.5" fill="${h.color}"><title>${escapeHtml(h.name)} — ${MONTHS_FR[i]} : ${v}</title></circle>`;
-    });
+  if (isStacked) {
+    // Barres empilées : un segment par habitude, cumul du nombre de complétions.
+    const slot = plotW / 12;
+    const bw = slot * 0.6;
+    for (let i = 0; i < 12; i++) {
+      const cx = padL + slot * i + slot / 2;
+      let acc = 0;
+      for (const h of shown) {
+        const v = h.monthly[i];
+        if (v <= 0) continue;
+        const yTop = y(acc + v);
+        const hgt = y(acc) - yTop;
+        svg += `<rect x="${cx - bw / 2}" y="${yTop}" width="${bw}" height="${hgt}" fill="${h.color}"><title>${escapeHtml(h.name)} — ${MONTHS_FR[i]} : ${v}</title></rect>`;
+        acc += v;
+      }
+    }
+  } else {
+    // Lignes : une par habitude (nombre ou taux %)
+    for (const h of shown) {
+      const pts = h.monthly.map((_, i) => `${x(i)},${y(valOf(h, i))}`).join(" ");
+      svg += `<polyline points="${pts}" fill="none" stroke="${h.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+      h.monthly.forEach((_, i) => {
+        const v = valOf(h, i);
+        svg += `<circle cx="${x(i)}" cy="${y(v)}" r="3.5" fill="${h.color}"><title>${escapeHtml(h.name)} — ${MONTHS_FR[i]} : ${v}${isRate ? "%" : ""}</title></circle>`;
+      });
+    }
   }
 
   svg += `</svg>`;
   wrap.innerHTML = svg;
 }
+
+// Sélecteur de mode du graphique
+document.querySelectorAll("#chart-modes .mode-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#chart-modes .mode-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    chartMode = btn.dataset.mode;
+    drawChart();
+  });
+});
 
 $("#year-picker").addEventListener("change", (e) => {
   const v = parseInt(e.target.value, 10);
@@ -274,6 +475,9 @@ async function renderManage() {
     const li = document.createElement("li");
     li.className = "manage-item";
 
+    const top = document.createElement("div");
+    top.className = "manage-top";
+
     const color = document.createElement("input");
     color.type = "color";
     color.value = h.color;
@@ -281,6 +485,9 @@ async function renderManage() {
     const name = document.createElement("input");
     name.type = "text";
     name.value = h.name;
+
+    const daysWrap = document.createElement("div");
+    daysWrap.className = "days-picker";
 
     const save = async () => {
       const newName = name.value.trim();
@@ -290,16 +497,23 @@ async function renderManage() {
       }
       await api("/api/habits/" + h.id, {
         method: "PUT",
-        body: JSON.stringify({ name: newName, color: color.value }),
+        body: JSON.stringify({
+          name: newName,
+          color: color.value,
+          days: maskToDays(daysWrap.dataset.mask),
+        }),
       });
       h.name = newName;
       h.color = color.value;
+      h.days = daysWrap.dataset.mask;
     };
     name.addEventListener("blur", save);
     name.addEventListener("keydown", (e) => {
       if (e.key === "Enter") name.blur();
     });
     color.addEventListener("change", save);
+
+    buildDaysPicker(daysWrap, h.days || "1111111", save);
 
     const del = document.createElement("button");
     del.className = "icon-btn danger";
@@ -311,10 +525,13 @@ async function renderManage() {
       renderManage();
     });
 
-    li.append(color, name, del);
+    top.append(color, name, del);
+    li.append(top, daysWrap);
     list.appendChild(li);
   }
 }
+
+buildDaysPicker($("#new-habit-days"), "1111111");
 
 $("#habit-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -322,10 +539,15 @@ $("#habit-form").addEventListener("submit", async (e) => {
   if (!name) return;
   await api("/api/habits", {
     method: "POST",
-    body: JSON.stringify({ name, color: $("#habit-color").value }),
+    body: JSON.stringify({
+      name,
+      color: $("#habit-color").value,
+      days: maskToDays($("#new-habit-days").dataset.mask),
+    }),
   });
   $("#habit-name").value = "";
   $("#habit-color").value = "#4f46e5";
+  buildDaysPicker($("#new-habit-days"), "1111111"); // réinitialise à « tous »
   renderManage();
 });
 

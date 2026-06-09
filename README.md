@@ -9,8 +9,12 @@ Application web pour **noter chaque jour les actions réalisées** et obtenir un
 - **Jour** : cocher d'un clic les habitudes réalisées, naviguer entre les jours.
 - **Récap mensuel** : nombre d'actions cochées, régularité moyenne, et une barre
   de progression par habitude (X jours sur le mois + pourcentage).
+- **Jours prévus** : pour chaque habitude, choix des jours de la semaine où
+  elle s'applique. Le taux de régularité se calcule sur ces jours-là.
+- **Calendrier** : pour une habitude donnée, un calendrier mensuel cliquable
+  pour cocher/décocher directement les jours réalisés.
 - **Synthèse** : graphique de l'évolution mois par mois sur une année, avec
-  filtre par habitude.
+  filtre par habitude et 3 modes (nombre, taux %, cumulé empilé).
 
 ## Stack
 
@@ -66,9 +70,12 @@ docker run -p 3000:3000 -v habits-data:/data habits-counting
 | `POST`   | `/api/logs/toggle`         | Basculer `{habit_id, date}`                   |
 | `GET`    | `/api/summary?month=YYYY-MM`| Récapitulatif mensuel                        |
 | `GET`    | `/api/trends?year=YYYY`    | Complétions par mois et par habitude (synthèse) |
+| `GET`    | `/api/habits/:id/calendar?month=YYYY-MM` | Dates réalisées + jours prévus, pour le calendrier |
 
 ## Modèle de données
 
-- `habits` : id, name, color, sort_order, archived, created_at
+- `habits` : id, name, color, sort_order, archived, created_at, days
+  (`days` = masque de 7 caractères '1'/'0', indexé par `getDay()` :
+  0 = dimanche … 6 = samedi)
 - `logs` : id, habit_id, date — une ligne = habitude cochée ce jour
   (contrainte d'unicité sur `(habit_id, date)`)

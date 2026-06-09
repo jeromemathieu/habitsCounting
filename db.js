@@ -31,4 +31,12 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_logs_habit ON logs(habit_id);
 `);
 
+// --- Migrations ---
+// `days` : jours de la semaine où l'habitude s'applique. Masque de 7 caractères
+// ('1'/'0') indexé par getDay() JS (0 = dimanche ... 6 = samedi). Défaut : tous.
+const habitCols = db.prepare("PRAGMA table_info(habits)").all().map((c) => c.name);
+if (!habitCols.includes("days")) {
+  db.exec("ALTER TABLE habits ADD COLUMN days TEXT NOT NULL DEFAULT '1111111'");
+}
+
 export default db;

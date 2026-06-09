@@ -14,6 +14,36 @@ app.use(express.static(join(__dirname, "public")));
 const isValidDate = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const isValidMonth = (s) => typeof s === "string" && /^\d{4}-\d{2}$/.test(s);
 
+// Normalise un masque de jours en chaîne de 7 caractères ('1'/'0'),
+// indexée par getDay() (0 = dimanche ... 6 = samedi).
+// Accepte soit une chaîne "1010101", soit un tableau d'index [1,3,5].
+function normalizeDays(input) {
+  if (input === undefined || input === null) return null;
+  let mask = new Array(7).fill("0");
+  if (Array.isArray(input)) {
+    for (const d of input) {
+      const n = Number(d);
+      if (Number.isInteger(n) && n >= 0 && n <= 6) mask[n] = "1";
+    }
+  } else if (typeof input === "string" && /^[01]{7}$/.test(input)) {
+    mask = input.split("");
+  } else {
+    return undefined; // entrée invalide
+  }
+  const out = mask.join("");
+  return out.includes("1") ? out : "1111111"; // au moins un jour, sinon tous
+}
+
+// Nombre de jours du mois (YYYY-MM) tombant sur les jours prévus du masque.
+function scheduledDaysInMonth(year, mon, mask) {
+  const total = new Date(year, mon, 0).getDate();
+  let n = 0;
+  for (let d = 1; d <= total; d++) {
+    if (mask[new Date(year, mon - 1, d).getDay()] === "1") n++;
+  }
+  return n;
+}
+
 // --- Habits ---
 
 // List active habits (ordered)
@@ -30,18 +60,21 @@ app.post("/api/habits", (req, res) => {
   const color = (req.body?.color || "#4f46e5").trim();
   if (!name) return res.status(400).json({ error: "Le nom est requis" });
 
+  const days = req.body?.days !== undefined ? normalizeDays(req.body.days) : "1111111";
+  if (days === undefined) return res.status(400).json({ error: "Jours invalides" });
+
   const maxOrder =
     db.prepare("SELECT COALESCE(MAX(sort_order), 0) AS m FROM habits").get().m;
   const info = db
-    .prepare("INSERT INTO habits (name, color, sort_order) VALUES (?, ?, ?)")
-    .run(name, color, maxOrder + 1);
+    .prepare("INSERT INTO habits (name, color, sort_order, days) VALUES (?, ?, ?, ?)")
+    .run(name, color, maxOrder + 1, days);
   const habit = db
     .prepare("SELECT * FROM habits WHERE id = ?")
     .get(info.lastInsertRowid);
   res.status(201).json(habit);
 });
 
-// Update a habit (name / color)
+// Update a habit (name / color / days)
 app.put("/api/habits/:id", (req, res) => {
   const id = Number(req.params.id);
   const existing = db.prepare("SELECT * FROM habits WHERE id = ?").get(id);
@@ -51,7 +84,13 @@ app.put("/api/habits/:id", (req, res) => {
   const color = req.body?.color !== undefined ? String(req.body.color).trim() : existing.color;
   if (!name) return res.status(400).json({ error: "Le nom est requis" });
 
-  db.prepare("UPDATE habits SET name = ?, color = ? WHERE id = ?").run(name, color, id);
+  let days = existing.days;
+  if (req.body?.days !== undefined) {
+    days = normalizeDays(req.body.days);
+    if (days === undefined) return res.status(400).json({ error: "Jours invalides" });
+  }
+
+  db.prepare("UPDATE habits SET name = ?, color = ?, days = ? WHERE id = ?").run(name, color, days, id);
   res.json(db.prepare("SELECT * FROM habits WHERE id = ?").get(id));
 });
 
@@ -125,12 +164,15 @@ app.get("/api/summary", (req, res) => {
 
   const summary = habits.map((h) => {
     const days = byHabit.get(h.id) || [];
+    // Le taux se calcule sur les jours prévus de l'habitude, pas sur tout le mois.
+    const scheduled = scheduledDaysInMonth(year, mon, h.days);
     return {
       id: h.id,
       name: h.name,
       color: h.color,
       count: days.length,
-      rate: daysInMonth ? Math.round((days.length / daysInMonth) * 100) : 0,
+      scheduled,
+      rate: scheduled ? Math.round((days.length / scheduled) * 100) : 0,
       days,
     };
   });
@@ -167,15 +209,40 @@ app.get("/api/trends", (req, res) => {
     if (arr) arr[r.mon - 1] = r.c;
   }
 
-  const result = habits.map((h) => ({
-    id: h.id,
-    name: h.name,
-    color: h.color,
-    monthly: counts.get(h.id),
-    total: counts.get(h.id).reduce((a, b) => a + b, 0),
-  }));
+  const y = Number(year);
+  const result = habits.map((h) => {
+    // Jours prévus par mois (pour calculer le taux % côté client).
+    const scheduled = [];
+    for (let m = 1; m <= 12; m++) scheduled.push(scheduledDaysInMonth(y, m, h.days));
+    return {
+      id: h.id,
+      name: h.name,
+      color: h.color,
+      monthly: counts.get(h.id),
+      scheduled,
+      total: counts.get(h.id).reduce((a, b) => a + b, 0),
+    };
+  });
 
-  res.json({ year: Number(year), habits: result });
+  res.json({ year: y, habits: result });
+});
+
+// --- Per-habit calendar ---
+
+// Liste des dates où une habitude a été réalisée dans un mois donné.
+app.get("/api/habits/:id/calendar", (req, res) => {
+  const id = Number(req.params.id);
+  const month = req.query.month;
+  if (!isValidMonth(month)) return res.status(400).json({ error: "Mois invalide (YYYY-MM)" });
+
+  const habit = db.prepare("SELECT * FROM habits WHERE id = ?").get(id);
+  if (!habit) return res.status(404).json({ error: "Habitude introuvable" });
+
+  const rows = db
+    .prepare("SELECT date FROM logs WHERE habit_id = ? AND date LIKE ? ORDER BY date")
+    .all(id, `${month}-%`);
+
+  res.json({ id, days: habit.days, dates: rows.map((r) => r.date) });
 });
 
 app.listen(PORT, () => {

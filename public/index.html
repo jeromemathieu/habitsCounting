@@ -11,6 +11,7 @@
       <h1>✅ Suivi des habitudes</h1>
       <nav class="tabs">
         <button class="tab active" data-view="day">Jour</button>
+        <button class="tab" data-view="calendar">Calendrier</button>
         <button class="tab" data-view="month">Récap mensuel</button>
         <button class="tab" data-view="synthese">Synthèse</button>
         <button class="tab" data-view="manage">Mes habitudes</button>
@@ -33,6 +34,21 @@
         </p>
       </section>
 
+      <!-- Vue Calendrier (saisie par habitude) -->
+      <section id="view-calendar" class="view">
+        <select id="calendar-habit" class="habit-select"></select>
+        <div class="date-bar">
+          <button id="cal-prev-month" class="nav-btn" aria-label="Mois précédent">‹</button>
+          <span id="cal-month-label" class="cal-month-label"></span>
+          <button id="cal-next-month" class="nav-btn" aria-label="Mois suivant">›</button>
+        </div>
+        <div id="calendar-grid" class="calendar-grid"></div>
+        <p class="cal-hint" id="cal-hint"></p>
+        <p id="calendar-empty" class="empty hidden">
+          Aucune habitude. Ajoute-en dans l'onglet « Mes habitudes ».
+        </p>
+      </section>
+
       <!-- Vue Récap mensuel -->
       <section id="view-month" class="view">
         <div class="date-bar">
@@ -52,6 +68,11 @@
           <input type="number" id="year-picker" min="2000" max="2100" step="1" />
           <button id="next-year" class="nav-btn" aria-label="Année suivante">›</button>
         </div>
+        <div class="chart-modes" id="chart-modes">
+          <button class="mode-btn active" data-mode="count">Nombre</button>
+          <button class="mode-btn" data-mode="rate">Taux %</button>
+          <button class="mode-btn" data-mode="stacked">Cumulé</button>
+        </div>
         <div id="habit-filter" class="habit-filter"></div>
         <div id="chart-wrap" class="chart-wrap"></div>
         <p id="synthese-empty" class="empty hidden">Aucune habitude à synthétiser.</p>
@@ -60,9 +81,12 @@
       <!-- Vue Gestion -->
       <section id="view-manage" class="view">
         <form id="habit-form" class="habit-form">
-          <input type="text" id="habit-name" placeholder="Nouvelle habitude (ex : Sport)" maxlength="60" required />
-          <input type="color" id="habit-color" value="#4f46e5" title="Couleur" />
-          <button type="submit">Ajouter</button>
+          <div class="habit-form-row">
+            <input type="text" id="habit-name" placeholder="Nouvelle habitude (ex : Sport)" maxlength="60" required />
+            <input type="color" id="habit-color" value="#4f46e5" title="Couleur" />
+            <button type="submit">Ajouter</button>
+          </div>
+          <div class="days-picker" id="new-habit-days" data-mask="1111111"></div>
         </form>
         <ul id="manage-list" class="manage-list"></ul>
         <p id="manage-empty" class="empty hidden">Aucune habitude. Ajoute ta première ci-dessus.</p>
