@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Suivi des habitudes</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>✅ Suivi des habitudes</h1>
+      <nav class="tabs">
+        <button class="tab active" data-view="day">Jour</button>
+        <button class="tab" data-view="month">Récap mensuel</button>
+        <button class="tab" data-view="manage">Mes habitudes</button>
+      </nav>
+    </header>
+
+    <main>
+      <!-- Vue Jour -->
+      <section id="view-day" class="view active">
+        <div class="date-bar">
+          <button id="prev-day" class="nav-btn" aria-label="Jour précédent">‹</button>
+          <input type="date" id="day-picker" />
+          <button id="next-day" class="nav-btn" aria-label="Jour suivant">›</button>
+          <button id="today-btn" class="link-btn">Aujourd'hui</button>
+        </div>
+        <p class="day-label" id="day-label"></p>
+        <ul id="day-list" class="habit-checklist"></ul>
+        <p id="day-empty" class="empty hidden">
+          Aucune habitude pour l'instant. Ajoute-en dans l'onglet « Mes habitudes ».
+        </p>
+      </section>
+
+      <!-- Vue Récap mensuel -->
+      <section id="view-month" class="view">
+        <div class="date-bar">
+          <button id="prev-month" class="nav-btn" aria-label="Mois précédent">‹</button>
+          <input type="month" id="month-picker" />
+          <button id="next-month" class="nav-btn" aria-label="Mois suivant">›</button>
+        </div>
+        <div id="month-stats" class="month-stats"></div>
+        <div id="month-summary"></div>
+        <p id="month-empty" class="empty hidden">Aucune habitude à récapituler.</p>
+      </section>
+
+      <!-- Vue Gestion -->
+      <section id="view-manage" class="view">
+        <form id="habit-form" class="habit-form">
+          <input type="text" id="habit-name" placeholder="Nouvelle habitude (ex : Sport)" maxlength="60" required />
+          <input type="color" id="habit-color" value="#4f46e5" title="Couleur" />
+          <button type="submit">Ajouter</button>
+        </form>
+        <ul id="manage-list" class="manage-list"></ul>
+        <p id="manage-empty" class="empty hidden">Aucune habitude. Ajoute ta première ci-dessus.</p>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
