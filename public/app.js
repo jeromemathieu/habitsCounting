@@ -77,6 +77,29 @@ let chartMode = "count"; // count | rate | stacked
 let calHabitId = null; // habitude sélectionnée dans le calendrier
 let calMonth = currentMonth; // mois affiché dans le calendrier
 
+// --- Thème clair / sombre ---
+function applyTheme(theme) {
+  const root = document.documentElement;
+  if (theme === "dark") root.setAttribute("data-theme", "dark");
+  else root.removeAttribute("data-theme");
+  const btn = $("#theme-toggle");
+  if (btn) btn.textContent = theme === "dark" ? "☀️" : "🌙";
+}
+function currentTheme() {
+  return localStorage.getItem("theme") || "light";
+}
+applyTheme(currentTheme());
+$("#theme-toggle").addEventListener("click", () => {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  localStorage.setItem("theme", next);
+  applyTheme(next);
+  if (chartInstance) drawChart(); // recolorer le graphique selon le thème
+});
+
+// Lit une variable CSS du thème courant.
+const cssVar = (name) =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
 // --- Tabs ---
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => {
@@ -388,6 +411,34 @@ function hexAlpha(hex, alpha) {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
 
+// Plugin : trace une ligne de référence horizontale en pointillés (moyenne).
+const referenceLinePlugin = {
+  id: "referenceLine",
+  afterDatasetsDraw(chart) {
+    const opt = chart.options.plugins.referenceLine;
+    if (!opt || opt.value == null) return;
+    const y = chart.scales.y.getPixelForValue(opt.value);
+    const { left, right } = chart.chartArea;
+    const c = chart.ctx;
+    c.save();
+    c.beginPath();
+    c.setLineDash([6, 4]);
+    c.lineWidth = 1.5;
+    c.strokeStyle = opt.color;
+    c.moveTo(left, y);
+    c.lineTo(right, y);
+    c.stroke();
+    c.setLineDash([]);
+    c.font = "600 11px system-ui, sans-serif";
+    c.fillStyle = opt.color;
+    c.textAlign = "right";
+    c.textBaseline = "bottom";
+    c.fillText(opt.label, right - 4, y - 3);
+    c.restore();
+  },
+};
+if (typeof Chart !== "undefined") Chart.register(referenceLinePlugin);
+
 function drawChart() {
   const wrap = $("#chart-wrap");
   const showMessage = (msg) => {
@@ -404,12 +455,23 @@ function drawChart() {
   const valOf = (h, i) =>
     isRate ? (h.scheduled[i] ? Math.round((h.monthly[i] / h.scheduled[i]) * 100) : 0) : h.monthly[i];
 
+  // Dégradé vertical sous une courbe (du plus opaque en haut vers transparent).
+  const makeGradient = (color) => (context) => {
+    const { chart } = context;
+    const { ctx: g, chartArea } = chart;
+    if (!chartArea) return hexAlpha(color, 0.12);
+    const grad = g.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+    grad.addColorStop(0, hexAlpha(color, 0.35));
+    grad.addColorStop(1, hexAlpha(color, 0));
+    return grad;
+  };
+
   const datasets = shown.map((h) => ({
     label: h.name,
     data: h.monthly.map((_, i) => valOf(h, i)),
     borderColor: h.color,
-    backgroundColor: isStacked ? h.color : hexAlpha(h.color, 0.12),
-    fill: false,
+    backgroundColor: isStacked ? h.color : makeGradient(h.color),
+    fill: isStacked ? true : "origin",
     tension: 0.35,
     borderWidth: 2.5,
     pointRadius: 3,
@@ -418,6 +480,21 @@ function drawChart() {
     borderRadius: isStacked ? 6 : 0,
     maxBarThickness: 26,
   }));
+
+  // Ligne de référence = moyenne des valeurs affichées (modes lignes uniquement).
+  const allVals = datasets.flatMap((d) => d.data);
+  const avg = allVals.length ? allVals.reduce((a, b) => a + b, 0) / allVals.length : 0;
+  const refLine = isStacked
+    ? { value: null }
+    : {
+        value: Math.round(avg),
+        label: `Moyenne ${Math.round(avg)}${isRate ? " %" : ""}`,
+        color: cssVar("--muted") || "#6b7280",
+      };
+
+  // Couleurs d'axes selon le thème
+  const tickColor = cssVar("--muted") || "#6b7280";
+  const gridColor = cssVar("--border") || "#e5e7eb";
 
   // (Re)crée le canvas
   if (!$("#chart-canvas")) wrap.innerHTML = '<canvas id="chart-canvas"></canvas>';
@@ -434,6 +511,7 @@ function drawChart() {
       interaction: { mode: "index", intersect: false },
       plugins: {
         legend: { display: false }, // on garde nos « chips » de filtre à la place
+        referenceLine: refLine,
         tooltip: {
           callbacks: {
             label: (c) => `${c.dataset.label} : ${c.parsed.y}${isRate ? " %" : ""}`,
@@ -444,15 +522,15 @@ function drawChart() {
         x: {
           stacked: isStacked,
           grid: { display: false },
-          ticks: { color: "#6b7280" },
+          ticks: { color: tickColor },
         },
         y: {
           stacked: isStacked,
           beginAtZero: true,
           ...(isRate ? { max: 100 } : {}),
-          grid: { color: "#eceef3" },
+          grid: { color: gridColor },
           ticks: {
-            color: "#6b7280",
+            color: tickColor,
             precision: 0,
             callback: (v) => (isRate ? v + " %" : v),
           },

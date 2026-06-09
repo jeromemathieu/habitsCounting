@@ -9,7 +9,19 @@
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
+:root[data-theme="dark"] {
+  --bg: #0f1117;
+  --card: #1a1d27;
+  --text: #e6e8ee;
+  --muted: #9aa1ad;
+  --border: #2b303c;
+  --primary: #7c79f0;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
 * { box-sizing: border-box; }
+
+html, body { background: var(--bg); }
 
 body {
   margin: 0;
@@ -28,10 +40,28 @@ body {
   z-index: 10;
 }
 
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
 .app-header h1 {
   margin: 0 0 0.75rem;
   font-size: 1.4rem;
 }
+.theme-toggle {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 2.2rem;
+  height: 2.2rem;
+  font-size: 1.1rem;
+  cursor: pointer;
+  margin-bottom: 0.75rem;
+  line-height: 1;
+}
+.theme-toggle:hover { border-color: var(--primary); }
 
 .tabs {
   display: flex;
