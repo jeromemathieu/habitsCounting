@@ -66,9 +66,14 @@ body {
 .tabs {
   display: flex;
   gap: 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
 }
+.tabs::-webkit-scrollbar { display: none; } /* Chrome/Safari */
 
 .tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
   background: none;
   border: none;
   padding: 0.6rem 0.9rem;
@@ -476,8 +481,10 @@ main {
 }
 .cal-cell.done .cal-dot { background: rgba(255, 255, 255, 0.85); }
 .cal-cell.today { border-color: var(--primary); }
-/* Jour hors période de validité de l'habitude */
-.cal-cell.out { opacity: 0.35; }
+/* Jour hors période de validité de l'habitude (non cliquable) */
+.cal-cell.out { opacity: 0.35; cursor: default; }
+.cal-cell.out:hover { box-shadow: none; }
+.cal-cell.out:active { transform: none; }
 .cal-cell.out:not(.done) { background: repeating-linear-gradient(
   45deg, var(--bg), var(--bg) 4px, var(--border) 4px, var(--border) 5px); }
 
@@ -611,3 +618,25 @@ main {
 }
 .icon-btn:hover { background: var(--bg); }
 .icon-btn.danger:hover { color: #dc2626; }
+
+/* --- Mobile --- */
+@media (max-width: 560px) {
+  main { padding: 1rem 0.75rem 4rem; }
+  .app-header { padding: 0.85rem 0.75rem 0; }
+  .app-header h1 { font-size: 1.2rem; }
+  .tab { padding: 0.55rem 0.7rem; font-size: 0.9rem; }
+
+  /* Stats du récap : 3 cartes qui passent à la ligne proprement */
+  .month-stats { flex-wrap: wrap; gap: 0.5rem; }
+  .stat-card { flex: 1 1 30%; padding: 0.6rem 0.4rem; }
+  .stat-card .big { font-size: 1.3rem; }
+
+  .chart-wrap { height: 300px; padding: 0.6rem; }
+  .chart-modes { width: 100%; }
+  .mode-btn { flex: 1; }
+
+  .calendar-grid { grid-auto-rows: 2.6rem; gap: 4px; }
+  .cal-cell { font-size: 0.85rem; border-radius: 8px; }
+
+  .habit-dates { font-size: 0.8rem; }
+}

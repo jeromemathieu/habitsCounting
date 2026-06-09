@@ -264,14 +264,18 @@ async function drawCalendar() {
     if (scheduled && !isDone) dot.style.background = color; // point « jour prévu »
     cell.append(num, dot);
 
-    cell.title = scheduled ? "Jour prévu" : "Jour non prévu";
-    cell.addEventListener("click", async () => {
-      await api("/api/logs/toggle", {
-        method: "POST",
-        body: JSON.stringify({ habit_id: calHabitId, date: iso }),
+    if (outRange) {
+      cell.title = "Hors période de l'habitude";
+    } else {
+      cell.title = scheduled ? "Jour prévu" : "Jour non prévu";
+      cell.addEventListener("click", async () => {
+        await api("/api/logs/toggle", {
+          method: "POST",
+          body: JSON.stringify({ habit_id: calHabitId, date: iso }),
+        });
+        drawCalendar();
       });
-      drawCalendar();
-    });
+    }
     grid.appendChild(cell);
   }
 
