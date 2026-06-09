@@ -68,7 +68,15 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_shares_viewer ON shares(viewer_id);
   CREATE INDEX IF NOT EXISTS idx_shares_owner ON shares(owner_id);
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
 `);
+
+// Réglage par défaut : autoriser les inscriptions.
+db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('allow_registration', 'true')").run();
 
 // --- Migrations ---
 // `days` : jours de la semaine où l'habitude s'applique. Masque de 7 caractères

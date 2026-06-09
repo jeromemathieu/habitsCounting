@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Administration — Suivi des habitudes</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Écran de connexion admin -->
+    <div id="admin-login" class="auth-screen">
+      <div class="auth-card">
+        <h1>🔐 Administration</h1>
+        <p id="admin-login-sub">Connexion à la console d'administration.</p>
+        <form id="admin-login-form">
+          <input type="email" id="admin-email" placeholder="Email admin" required autocomplete="username" />
+          <input type="password" id="admin-password" placeholder="Mot de passe admin" required autocomplete="current-password" />
+          <p id="admin-login-error" class="auth-error hidden"></p>
+          <button type="submit">Se connecter</button>
+        </form>
+        <p class="auth-switch"><a href="/" class="link-btn">← Retour à l'application</a></p>
+      </div>
+    </div>
+
+    <!-- Console -->
+    <div id="admin-app" class="hidden">
+      <header class="app-header">
+        <div class="header-top">
+          <h1>🔐 Console d'administration</h1>
+          <div class="header-actions">
+            <a href="/" class="link-btn">Application</a>
+            <button id="admin-logout" class="theme-toggle" title="Se déconnecter">⏻</button>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <section class="admin-section">
+          <h2 class="admin-h2">Réglages</h2>
+          <label class="switch-row">
+            <input type="checkbox" id="set-registration" />
+            <span>Autoriser les inscriptions de nouveaux comptes</span>
+          </label>
+        </section>
+
+        <section class="admin-section">
+          <h2 class="admin-h2">Utilisateurs <span id="users-count" class="muted-count"></span></h2>
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Habitudes</th>
+                  <th>Créé le</th>
+                  <th>Nouveau mot de passe</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="users-tbody"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="admin.js"></script>
+  </body>
+</html>

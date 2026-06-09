@@ -16,6 +16,11 @@ services:
     environment:
       PORT: 3000
       DB_PATH: /data/data.sqlite
+      # Console d'administration (/admin.html). Décommente et définis un mot de
+      # passe pour l'activer. Évite de committer le secret : utilise un fichier
+      # .env (docker compose le lit) ou l'environnement de l'hôte.
+      # ADMIN_EMAIL: admin@famillemathieu.org
+      # ADMIN_PASSWORD: ${ADMIN_PASSWORD}
     volumes:
       - habits-data:/data
     restart: unless-stopped

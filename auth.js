@@ -91,4 +91,72 @@ export function clearSessionCookie(req, res) {
   res.append("Set-Cookie", attrs.join("; "));
 }
 
-export { SESSION_COOKIE };
+// --- Administration ---
+// Identifiants admin via variables d'environnement (mot de passe unique).
+const ADMIN_COOKIE = "asid";
+const ADMIN_SESSION_HOURS = 8;
+const adminSessions = new Map(); // token -> expiry (ms)
+
+export function isAdminConfigured() {
+  return !!process.env.ADMIN_PASSWORD;
+}
+
+export function getAdminEmail() {
+  return (process.env.ADMIN_EMAIL || "admin").trim().toLowerCase();
+}
+
+// Comparaison à temps constant de deux chaînes.
+function safeEqual(a, b) {
+  const ba = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  if (ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
+
+export function verifyAdmin(email, password) {
+  if (!isAdminConfigured()) return false;
+  const okEmail = safeEqual(String(email).trim().toLowerCase(), getAdminEmail());
+  const okPass = safeEqual(password, process.env.ADMIN_PASSWORD);
+  return okEmail && okPass;
+}
+
+export function createAdminSession() {
+  const token = crypto.randomBytes(32).toString("hex");
+  adminSessions.set(token, Date.now() + ADMIN_SESSION_HOURS * 3600_000);
+  return token;
+}
+
+export function isAdminSession(token) {
+  if (!token) return false;
+  const exp = adminSessions.get(token);
+  if (!exp) return false;
+  if (exp < Date.now()) {
+    adminSessions.delete(token);
+    return false;
+  }
+  return true;
+}
+
+export function deleteAdminSession(token) {
+  if (token) adminSessions.delete(token);
+}
+
+export function setAdminCookie(req, res, token) {
+  const attrs = [
+    `${ADMIN_COOKIE}=${token}`,
+    "HttpOnly",
+    "Path=/",
+    "SameSite=Lax",
+    `Max-Age=${ADMIN_SESSION_HOURS * 3600}`,
+  ];
+  if (isSecure(req)) attrs.push("Secure");
+  res.append("Set-Cookie", attrs.join("; "));
+}
+
+export function clearAdminCookie(req, res) {
+  const attrs = [`${ADMIN_COOKIE}=`, "HttpOnly", "Path=/", "SameSite=Lax", "Max-Age=0"];
+  if (isSecure(req)) attrs.push("Secure");
+  res.append("Set-Cookie", attrs.join("; "));
+}
+
+export { SESSION_COOKIE, ADMIN_COOKIE };

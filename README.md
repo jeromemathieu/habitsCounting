@@ -66,11 +66,23 @@ docker run -p 3000:3000 -v habits-data:/data habits-counting
 
 ## Configuration
 
-| Variable               | Défaut          | Description                                       |
-| ---------------------- | --------------- | ------------------------------------------------- |
-| `PORT`                 | `3000`          | Port d'écoute du serveur                          |
-| `DB_PATH`              | `./data.sqlite` | Chemin du fichier base de données                 |
-| `DISABLE_REGISTRATION` | _(non défini)_  | Si défini (ex. `1`), bloque les nouvelles inscriptions une fois au moins un compte créé |
+| Variable         | Défaut          | Description                                              |
+| ---------------- | --------------- | ------------------------------------------------------- |
+| `PORT`           | `3000`          | Port d'écoute du serveur                                |
+| `DB_PATH`        | `./data.sqlite` | Chemin du fichier base de données                       |
+| `ADMIN_PASSWORD` | _(non défini)_  | Active la console d'admin (`/admin.html`) avec ce mot de passe unique. Non défini = console désactivée. |
+| `ADMIN_EMAIL`    | `admin`         | Identifiant de connexion de la console d'admin          |
+
+> L'autorisation des inscriptions n'est plus une variable d'environnement :
+> elle se règle désormais dans la **console d'administration**.
+
+## Administration
+
+Si `ADMIN_PASSWORD` est défini, une console est accessible sur **`/admin.html`**
+(identifiants `ADMIN_EMAIL` / `ADMIN_PASSWORD`, indépendants des comptes
+utilisateurs). Elle permet de : lister les utilisateurs et leur nombre
+d'habitudes, modifier leur email, **définir un nouveau mot de passe**, supprimer
+un compte, et **activer/désactiver les inscriptions**.
 
 ## API
 
@@ -98,6 +110,11 @@ Toutes les routes `/api` (hors authentification) requièrent une session valide
 | `POST`   | `/api/shares`              | Partager avec `{email}`                       |
 | `DELETE` | `/api/shares/:id`          | Révoquer un partage                           |
 | `GET`    | `/api/shared`              | Personnes qui partagent avec moi (entrant)    |
+| `POST`   | `/api/admin/login`         | Connexion admin `{email, password}`           |
+| `GET`    | `/api/admin/users`         | (admin) Utilisateurs + nombre d'habitudes     |
+| `PUT`    | `/api/admin/users/:id`     | (admin) Modifier email / mot de passe         |
+| `DELETE` | `/api/admin/users/:id`     | (admin) Supprimer un utilisateur              |
+| `GET/PUT`| `/api/admin/settings`      | (admin) Réglages (inscriptions on/off)        |
 
 > Les routes de **lecture** (`/api/habits`, `/api/logs`, `/api/summary`,
 > `/api/trends`, `/api/notes`, calendrier) acceptent `?owner=<id>` pour
@@ -118,6 +135,7 @@ Toutes les routes `/api` (hors authentification) requièrent une session valide
   (contrainte d'unicité sur `(habit_id, date)`)
 - `shares` : id, owner_id, viewer_id — partage en lecture du propriétaire vers
   le lecteur (contrainte d'unicité sur `(owner_id, viewer_id)`)
+- `settings` : key, value — réglages applicatifs (ex. `allow_registration`)
 
 > **Migration** : au démarrage, les colonnes manquantes sont ajoutées
 > automatiquement. La **première inscription** récupère les habitudes

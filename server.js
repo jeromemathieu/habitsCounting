@@ -12,6 +12,15 @@ import {
   setSessionCookie,
   clearSessionCookie,
   SESSION_COOKIE,
+  ADMIN_COOKIE,
+  isAdminConfigured,
+  getAdminEmail,
+  verifyAdmin,
+  createAdminSession,
+  isAdminSession,
+  deleteAdminSession,
+  setAdminCookie,
+  clearAdminCookie,
 } from "./auth.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -52,6 +61,20 @@ function effectiveOwner(req) {
 // --- Authentification ---
 const isValidEmail = (s) => typeof s === "string" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s);
 
+// Lecture/écriture d'un réglage applicatif.
+function getSetting(key) {
+  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key);
+  return row ? row.value : null;
+}
+const registrationAllowed = () => getSetting("allow_registration") !== "false";
+
+// Middleware : réservé à une session admin valide.
+function requireAdmin(req, res, next) {
+  const token = parseCookies(req)[ADMIN_COOKIE];
+  if (!isAdminSession(token)) return res.status(401).json({ error: "Admin non authentifié" });
+  next();
+}
+
 // Inscription. La 1re inscription récupère les habitudes orphelines (pré-auth).
 app.post("/api/auth/register", (req, res) => {
   const email = String(req.body?.email || "").trim().toLowerCase();
@@ -61,7 +84,8 @@ app.post("/api/auth/register", (req, res) => {
     return res.status(400).json({ error: "Mot de passe : 8 caractères minimum" });
 
   const userCount = db.prepare("SELECT COUNT(*) AS c FROM users").get().c;
-  if (userCount > 0 && process.env.DISABLE_REGISTRATION)
+  // On autorise toujours le tout premier compte (amorçage), sinon on respecte le réglage.
+  if (userCount > 0 && !registrationAllowed())
     return res.status(403).json({ error: "Les inscriptions sont désactivées" });
 
   const exists = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
@@ -106,6 +130,94 @@ app.post("/api/auth/logout", (req, res) => {
 app.get("/api/auth/me", (req, res) => {
   if (!req.user) return res.status(401).json({ error: "Non authentifié" });
   res.json(req.user);
+});
+
+// --- Administration (console) ---
+
+// Connexion admin (identifiants d'environnement).
+app.post("/api/admin/login", (req, res) => {
+  if (!isAdminConfigured())
+    return res.status(503).json({ error: "Console admin non configurée (ADMIN_PASSWORD)" });
+  const email = String(req.body?.email || "");
+  const password = String(req.body?.password || "");
+  if (!verifyAdmin(email, password))
+    return res.status(401).json({ error: "Identifiants admin incorrects" });
+  const token = createAdminSession();
+  setAdminCookie(req, res, token);
+  res.json({ admin: true, email: getAdminEmail() });
+});
+
+app.post("/api/admin/logout", (req, res) => {
+  deleteAdminSession(parseCookies(req)[ADMIN_COOKIE]);
+  clearAdminCookie(req, res);
+  res.status(204).end();
+});
+
+app.get("/api/admin/me", (req, res) => {
+  const token = parseCookies(req)[ADMIN_COOKIE];
+  if (!isAdminSession(token))
+    return res.status(401).json({ error: "Admin non authentifié", configured: isAdminConfigured() });
+  res.json({ admin: true, email: getAdminEmail() });
+});
+
+// Liste des utilisateurs + nombre d'habitudes.
+app.get("/api/admin/users", requireAdmin, (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT u.id, u.email, u.created_at,
+              (SELECT COUNT(*) FROM habits h WHERE h.user_id = u.id) AS habit_count,
+              (SELECT COUNT(*) FROM habits h WHERE h.user_id = u.id AND h.archived = 0) AS active_count
+       FROM users u ORDER BY u.id`
+    )
+    .all();
+  res.json(rows);
+});
+
+// Modifier un utilisateur : email et/ou mot de passe.
+app.put("/api/admin/users/:id", requireAdmin, (req, res) => {
+  const id = Number(req.params.id);
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+  if (!user) return res.status(404).json({ error: "Utilisateur introuvable" });
+
+  let email = user.email;
+  if (req.body?.email !== undefined) {
+    email = String(req.body.email).trim().toLowerCase();
+    if (!isValidEmail(email)) return res.status(400).json({ error: "Email invalide" });
+    const clash = db.prepare("SELECT id FROM users WHERE email = ? AND id <> ?").get(email, id);
+    if (clash) return res.status(409).json({ error: "Cet email est déjà utilisé" });
+  }
+
+  let password = user.password;
+  if (req.body?.password !== undefined && req.body.password !== "") {
+    if (String(req.body.password).length < 8)
+      return res.status(400).json({ error: "Mot de passe : 8 caractères minimum" });
+    password = hashPassword(String(req.body.password));
+  }
+
+  db.prepare("UPDATE users SET email = ?, password = ? WHERE id = ?").run(email, password, id);
+  res.json({ id, email });
+});
+
+// Supprimer un utilisateur (et ses habitudes/logs/notes/partages via cascade).
+app.delete("/api/admin/users/:id", requireAdmin, (req, res) => {
+  const info = db.prepare("DELETE FROM users WHERE id = ?").run(Number(req.params.id));
+  if (info.changes === 0) return res.status(404).json({ error: "Utilisateur introuvable" });
+  res.status(204).end();
+});
+
+// Réglages applicatifs.
+app.get("/api/admin/settings", requireAdmin, (req, res) => {
+  res.json({ allow_registration: registrationAllowed() });
+});
+
+app.put("/api/admin/settings", requireAdmin, (req, res) => {
+  if (req.body?.allow_registration !== undefined) {
+    const v = req.body.allow_registration ? "true" : "false";
+    db.prepare(
+      "INSERT INTO settings (key, value) VALUES ('allow_registration', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+    ).run(v);
+  }
+  res.json({ allow_registration: registrationAllowed() });
 });
 
 // --- Partage (lecture seule) ---
