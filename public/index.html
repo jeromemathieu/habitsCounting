@@ -12,6 +12,7 @@
       <nav class="tabs">
         <button class="tab active" data-view="day">Jour</button>
         <button class="tab" data-view="month">Récap mensuel</button>
+        <button class="tab" data-view="synthese">Synthèse</button>
         <button class="tab" data-view="manage">Mes habitudes</button>
       </nav>
     </header>
@@ -42,6 +43,18 @@
         <div id="month-stats" class="month-stats"></div>
         <div id="month-summary"></div>
         <p id="month-empty" class="empty hidden">Aucune habitude à récapituler.</p>
+      </section>
+
+      <!-- Vue Synthèse -->
+      <section id="view-synthese" class="view">
+        <div class="date-bar">
+          <button id="prev-year" class="nav-btn" aria-label="Année précédente">‹</button>
+          <input type="number" id="year-picker" min="2000" max="2100" step="1" />
+          <button id="next-year" class="nav-btn" aria-label="Année suivante">›</button>
+        </div>
+        <div id="habit-filter" class="habit-filter"></div>
+        <div id="chart-wrap" class="chart-wrap"></div>
+        <p id="synthese-empty" class="empty hidden">Aucune habitude à synthétiser.</p>
       </section>
 
       <!-- Vue Gestion -->

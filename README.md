@@ -9,6 +9,8 @@ Application web pour **noter chaque jour les actions réalisées** et obtenir un
 - **Jour** : cocher d'un clic les habitudes réalisées, naviguer entre les jours.
 - **Récap mensuel** : nombre d'actions cochées, régularité moyenne, et une barre
   de progression par habitude (X jours sur le mois + pourcentage).
+- **Synthèse** : graphique de l'évolution mois par mois sur une année, avec
+  filtre par habitude.
 
 ## Stack
 
@@ -63,6 +65,7 @@ docker run -p 3000:3000 -v habits-data:/data habits-counting
 | `GET`    | `/api/logs?date=YYYY-MM-DD`| Ids des habitudes cochées ce jour-là          |
 | `POST`   | `/api/logs/toggle`         | Basculer `{habit_id, date}`                   |
 | `GET`    | `/api/summary?month=YYYY-MM`| Récapitulatif mensuel                        |
+| `GET`    | `/api/trends?year=YYYY`    | Complétions par mois et par habitude (synthèse) |
 
 ## Modèle de données
 

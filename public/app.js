@@ -37,6 +37,8 @@ const frMonth = (ym) => {
 // --- State ---
 let currentDate = toISODate(new Date());
 let currentMonth = currentDate.slice(0, 7);
+let currentYear = new Date().getFullYear();
+let selectedHabits = null; // Set d'ids affichés dans la synthèse (null = tous)
 
 // --- Tabs ---
 document.querySelectorAll(".tab").forEach((tab) => {
@@ -48,6 +50,7 @@ document.querySelectorAll(".tab").forEach((tab) => {
     $("#view-" + view).classList.add("active");
     if (view === "day") renderDay();
     if (view === "month") renderMonth();
+    if (view === "synthese") renderSynthese();
     if (view === "manage") renderManage();
   });
 });
@@ -153,6 +156,112 @@ function shiftMonth(delta) {
   currentMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   renderMonth();
 }
+
+// --- Synthèse view ---
+const MONTHS_FR = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
+let trendsCache = null; // dernières données /api/trends
+let knownHabitIds = new Set(); // ids connus au dernier rendu (pour repérer les nouvelles)
+
+async function renderSynthese() {
+  $("#year-picker").value = currentYear;
+  const data = await api("/api/trends?year=" + currentYear);
+  trendsCache = data;
+
+  $("#synthese-empty").classList.toggle("hidden", data.habits.length > 0);
+
+  // Initialise / nettoie la sélection (par défaut : toutes les habitudes)
+  const ids = new Set(data.habits.map((h) => h.id));
+  if (selectedHabits === null) {
+    selectedHabits = new Set(ids);
+  } else {
+    for (const id of [...selectedHabits]) if (!ids.has(id)) selectedHabits.delete(id);
+    for (const id of ids) if (!knownHabitIds.has(id)) selectedHabits.add(id); // nouvelles habitudes
+    if (selectedHabits.size === 0) selectedHabits = new Set(ids);
+  }
+  knownHabitIds = ids;
+
+  renderFilter(data.habits);
+  drawChart();
+}
+
+function renderFilter(habits) {
+  const wrap = $("#habit-filter");
+  wrap.innerHTML = "";
+  for (const h of habits) {
+    const active = selectedHabits.has(h.id);
+    const chip = document.createElement("button");
+    chip.className = "filter-chip" + (active ? " active" : "");
+    chip.innerHTML = `<span class="chip-dot" style="background:${active ? h.color : "var(--border)"}"></span>${escapeHtml(h.name)}`;
+    chip.style.borderColor = active ? h.color : "";
+    chip.addEventListener("click", () => {
+      if (selectedHabits.has(h.id)) selectedHabits.delete(h.id);
+      else selectedHabits.add(h.id);
+      if (selectedHabits.size === 0) selectedHabits.add(h.id); // garde-en au moins une
+      renderFilter(habits);
+      drawChart();
+    });
+    wrap.appendChild(chip);
+  }
+}
+
+function drawChart() {
+  const wrap = $("#chart-wrap");
+  if (!trendsCache || trendsCache.habits.length === 0) {
+    wrap.innerHTML = '<div class="chart-empty">Aucune donnée.</div>';
+    return;
+  }
+  const shown = trendsCache.habits.filter((h) => selectedHabits.has(h.id));
+
+  // Géométrie
+  const W = 900, H = 380;
+  const padL = 40, padR = 16, padT = 20, padB = 36;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  const maxVal = Math.max(1, ...shown.flatMap((h) => h.monthly));
+  // Échelle Y arrondie à un palier lisible
+  const step = Math.max(1, Math.ceil(maxVal / 5));
+  const yMax = step * 5;
+
+  const x = (i) => padL + (plotW * i) / 11;
+  const y = (v) => padT + plotH - (plotH * v) / yMax;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Évolution mensuelle">`;
+
+  // Grille horizontale + labels Y
+  for (let g = 0; g <= 5; g++) {
+    const val = (yMax / 5) * g;
+    const gy = y(val);
+    svg += `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="#e5e7eb" stroke-width="1"/>`;
+    svg += `<text x="${padL - 8}" y="${gy + 4}" font-size="11" fill="#6b7280" text-anchor="end">${val}</text>`;
+  }
+  // Labels X (mois)
+  for (let i = 0; i < 12; i++) {
+    svg += `<text x="${x(i)}" y="${H - 12}" font-size="11" fill="#6b7280" text-anchor="middle">${MONTHS_FR[i]}</text>`;
+  }
+
+  // Une ligne + points par habitude
+  for (const h of shown) {
+    const pts = h.monthly.map((v, i) => `${x(i)},${y(v)}`).join(" ");
+    svg += `<polyline points="${pts}" fill="none" stroke="${h.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+    h.monthly.forEach((v, i) => {
+      svg += `<circle cx="${x(i)}" cy="${y(v)}" r="3.5" fill="${h.color}"><title>${escapeHtml(h.name)} — ${MONTHS_FR[i]} : ${v}</title></circle>`;
+    });
+  }
+
+  svg += `</svg>`;
+  wrap.innerHTML = svg;
+}
+
+$("#year-picker").addEventListener("change", (e) => {
+  const v = parseInt(e.target.value, 10);
+  if (!Number.isNaN(v)) {
+    currentYear = v;
+    renderSynthese();
+  }
+});
+$("#prev-year").addEventListener("click", () => { currentYear--; renderSynthese(); });
+$("#next-year").addEventListener("click", () => { currentYear++; renderSynthese(); });
 
 // --- Manage view ---
 async function renderManage() {

@@ -140,6 +140,44 @@ app.get("/api/summary", (req, res) => {
   res.json({ month, daysInMonth, totalCompletions, habits: summary });
 });
 
+// --- Yearly trends ---
+
+// Returns, for a given year, the monthly completion count (12 values, Jan..Dec)
+// for each habit. Used by the "Synthèse" view to draw a per-month chart.
+app.get("/api/trends", (req, res) => {
+  const year = req.query.year;
+  if (typeof year !== "string" || !/^\d{4}$/.test(year))
+    return res.status(400).json({ error: "Année invalide (YYYY)" });
+
+  const habits = db
+    .prepare("SELECT * FROM habits WHERE archived = 0 ORDER BY sort_order, id")
+    .all();
+
+  const rows = db
+    .prepare(
+      `SELECT habit_id, CAST(substr(date, 6, 2) AS INTEGER) AS mon, COUNT(*) AS c
+       FROM logs WHERE date LIKE ? GROUP BY habit_id, mon`
+    )
+    .all(`${year}-%`);
+
+  const counts = new Map(); // habit_id -> [12]
+  for (const h of habits) counts.set(h.id, new Array(12).fill(0));
+  for (const r of rows) {
+    const arr = counts.get(r.habit_id);
+    if (arr) arr[r.mon - 1] = r.c;
+  }
+
+  const result = habits.map((h) => ({
+    id: h.id,
+    name: h.name,
+    color: h.color,
+    monthly: counts.get(h.id),
+    total: counts.get(h.id).reduce((a, b) => a + b, 0),
+  }));
+
+  res.json({ year: Number(year), habits: result });
+});
+
 app.listen(PORT, () => {
   console.log(`Habits Counting en écoute sur http://localhost:${PORT}`);
 });

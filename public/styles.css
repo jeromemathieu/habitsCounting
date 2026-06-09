@@ -232,6 +232,51 @@ main {
   border-radius: 4px;
 }
 
+/* Synthèse view */
+.habit-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  cursor: pointer;
+  font-size: 0.9rem;
+  user-select: none;
+  color: var(--muted);
+}
+.filter-chip .chip-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+.filter-chip.active {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.chart-wrap {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 0.75rem 0.5rem;
+  box-shadow: var(--shadow);
+  overflow-x: auto;
+}
+.chart-wrap svg { display: block; width: 100%; height: auto; }
+.chart-empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 2rem 0;
+}
+
 /* Manage view */
 .habit-form {
   display: flex;
