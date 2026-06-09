@@ -7,10 +7,32 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <!-- Écran d'authentification (affiché si non connecté) -->
+    <div id="auth-screen" class="auth-screen">
+      <div class="auth-card">
+        <h1>✅ Suivi des habitudes</h1>
+        <p id="auth-subtitle">Connecte-toi pour accéder à tes habitudes.</p>
+        <form id="auth-form">
+          <input type="email" id="auth-email" placeholder="Email" required autocomplete="username" />
+          <input type="password" id="auth-password" placeholder="Mot de passe (8 caractères min.)" required autocomplete="current-password" minlength="8" />
+          <p id="auth-error" class="auth-error hidden"></p>
+          <button type="submit" id="auth-submit">Se connecter</button>
+        </form>
+        <p class="auth-switch">
+          <span id="auth-switch-text">Pas encore de compte ?</span>
+          <button type="button" id="auth-switch-btn" class="link-btn">Créer un compte</button>
+        </p>
+      </div>
+    </div>
+
     <header class="app-header">
       <div class="header-top">
         <h1>✅ Suivi des habitudes</h1>
-        <button id="theme-toggle" class="theme-toggle" aria-label="Changer de thème" title="Changer de thème">🌙</button>
+        <div class="header-actions">
+          <span id="user-email" class="user-email"></span>
+          <button id="theme-toggle" class="theme-toggle" aria-label="Changer de thème" title="Changer de thème">🌙</button>
+          <button id="logout-btn" class="theme-toggle" aria-label="Se déconnecter" title="Se déconnecter">⏻</button>
+        </div>
       </div>
       <nav class="tabs">
         <button class="tab active" data-view="day">Jour</button>

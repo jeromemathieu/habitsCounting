@@ -10,6 +10,20 @@ db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    email      TEXT NOT NULL UNIQUE,
+    password   TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    token      TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    expires_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS habits (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT NOT NULL,
@@ -45,5 +59,11 @@ if (!habitCols.includes("start_date")) {
 if (!habitCols.includes("end_date")) {
   db.exec("ALTER TABLE habits ADD COLUMN end_date TEXT");
 }
+// Rattachement à un utilisateur (NULL pour les habitudes créées avant l'auth ;
+// elles seront réclamées par le premier compte créé, cf. server.js).
+if (!habitCols.includes("user_id")) {
+  db.exec("ALTER TABLE habits ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE");
+}
+db.exec("CREATE INDEX IF NOT EXISTS idx_habits_user ON habits(user_id)");
 
 export default db;

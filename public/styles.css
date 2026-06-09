@@ -23,6 +23,75 @@
 
 html, body { background: var(--bg); }
 
+/* --- Authentification --- */
+/* Par défaut (non connecté) : on masque l'app, on montre l'écran d'auth. */
+.app-header, main { display: none; }
+body.authed .app-header { display: block; }
+body.authed main { display: block; }
+body.authed #auth-screen { display: none; }
+
+.auth-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.75rem;
+}
+.auth-card h1 { margin: 0 0 0.25rem; font-size: 1.4rem; }
+#auth-subtitle { color: var(--muted); margin: 0 0 1.25rem; font-size: 0.95rem; }
+#auth-form { display: flex; flex-direction: column; gap: 0.7rem; }
+#auth-form input {
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 1rem;
+  background: var(--bg);
+  color: var(--text);
+}
+#auth-submit {
+  padding: 0.75rem;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.auth-error {
+  color: #dc2626;
+  font-size: 0.88rem;
+  margin: 0;
+  background: rgba(220, 38, 38, 0.08);
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+}
+.auth-switch {
+  margin: 1rem 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.header-actions { display: flex; align-items: center; gap: 0.5rem; }
+.user-email {
+  font-size: 0.85rem;
+  color: var(--muted);
+  max-width: 40vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;

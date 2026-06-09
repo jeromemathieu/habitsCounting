@@ -2,13 +2,98 @@ import express from "express";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import db from "./db.js";
+import {
+  hashPassword,
+  verifyPassword,
+  createSession,
+  getSessionUser,
+  deleteSession,
+  parseCookies,
+  setSessionCookie,
+  clearSessionCookie,
+  SESSION_COOKIE,
+} from "./auth.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.set("trust proxy", 1); // derrière Traefik : pour détecter HTTPS (cookie Secure)
 app.use(express.json());
 app.use(express.static(join(__dirname, "public")));
+
+// Attache l'utilisateur courant (si session valide) à chaque requête.
+app.use((req, res, next) => {
+  const token = parseCookies(req)[SESSION_COOKIE];
+  req.sessionToken = token || null;
+  req.user = getSessionUser(token);
+  next();
+});
+
+// Protège les routes de données : renvoie 401 si non authentifié.
+function requireAuth(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: "Non authentifié" });
+  next();
+}
+
+// --- Authentification ---
+const isValidEmail = (s) => typeof s === "string" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s);
+
+// Inscription. La 1re inscription récupère les habitudes orphelines (pré-auth).
+app.post("/api/auth/register", (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const password = String(req.body?.password || "");
+  if (!isValidEmail(email)) return res.status(400).json({ error: "Email invalide" });
+  if (password.length < 8)
+    return res.status(400).json({ error: "Mot de passe : 8 caractères minimum" });
+
+  const userCount = db.prepare("SELECT COUNT(*) AS c FROM users").get().c;
+  if (userCount > 0 && process.env.DISABLE_REGISTRATION)
+    return res.status(403).json({ error: "Les inscriptions sont désactivées" });
+
+  const exists = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
+  if (exists) return res.status(409).json({ error: "Cet email est déjà utilisé" });
+
+  const info = db
+    .prepare("INSERT INTO users (email, password) VALUES (?, ?)")
+    .run(email, hashPassword(password));
+  const userId = info.lastInsertRowid;
+
+  // Premier compte : adopte les éventuelles habitudes créées avant l'auth.
+  if (userCount === 0) {
+    db.prepare("UPDATE habits SET user_id = ? WHERE user_id IS NULL").run(userId);
+  }
+
+  const token = createSession(userId);
+  setSessionCookie(req, res, token);
+  res.status(201).json({ id: userId, email });
+});
+
+// Connexion.
+app.post("/api/auth/login", (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const password = String(req.body?.password || "");
+  const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
+  if (!user || !verifyPassword(password, user.password))
+    return res.status(401).json({ error: "Email ou mot de passe incorrect" });
+
+  const token = createSession(user.id);
+  setSessionCookie(req, res, token);
+  res.json({ id: user.id, email: user.email });
+});
+
+// Déconnexion.
+app.post("/api/auth/logout", (req, res) => {
+  deleteSession(req.sessionToken);
+  clearSessionCookie(req, res);
+  res.status(204).end();
+});
+
+// Utilisateur courant.
+app.get("/api/auth/me", (req, res) => {
+  if (!req.user) return res.status(401).json({ error: "Non authentifié" });
+  res.json(req.user);
+});
 
 // --- Validation helpers ---
 const isValidDate = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -61,15 +146,15 @@ function scheduledDaysInMonth(year, mon, mask, start = null, end = null) {
 // --- Habits ---
 
 // List active habits (ordered)
-app.get("/api/habits", (req, res) => {
+app.get("/api/habits", requireAuth, (req, res) => {
   const habits = db
-    .prepare("SELECT * FROM habits WHERE archived = 0 ORDER BY sort_order, id")
-    .all();
+    .prepare("SELECT * FROM habits WHERE archived = 0 AND user_id = ? ORDER BY sort_order, id")
+    .all(req.user.id);
   res.json(habits);
 });
 
 // Create a habit
-app.post("/api/habits", (req, res) => {
+app.post("/api/habits", requireAuth, (req, res) => {
   const name = (req.body?.name || "").trim();
   const color = (req.body?.color || "#4f46e5").trim();
   if (!name) return res.status(400).json({ error: "Le nom est requis" });
@@ -84,13 +169,14 @@ app.post("/api/habits", (req, res) => {
   if (startDate && endDate && startDate > endDate)
     return res.status(400).json({ error: "La date de début doit précéder la date de fin" });
 
-  const maxOrder =
-    db.prepare("SELECT COALESCE(MAX(sort_order), 0) AS m FROM habits").get().m;
+  const maxOrder = db
+    .prepare("SELECT COALESCE(MAX(sort_order), 0) AS m FROM habits WHERE user_id = ?")
+    .get(req.user.id).m;
   const info = db
     .prepare(
-      "INSERT INTO habits (name, color, sort_order, days, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?)"
+      "INSERT INTO habits (name, color, sort_order, days, start_date, end_date, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
     )
-    .run(name, color, maxOrder + 1, days, startDate, endDate);
+    .run(name, color, maxOrder + 1, days, startDate, endDate, req.user.id);
   const habit = db
     .prepare("SELECT * FROM habits WHERE id = ?")
     .get(info.lastInsertRowid);
@@ -98,9 +184,11 @@ app.post("/api/habits", (req, res) => {
 });
 
 // Update a habit (name / color / days)
-app.put("/api/habits/:id", (req, res) => {
+app.put("/api/habits/:id", requireAuth, (req, res) => {
   const id = Number(req.params.id);
-  const existing = db.prepare("SELECT * FROM habits WHERE id = ?").get(id);
+  const existing = db
+    .prepare("SELECT * FROM habits WHERE id = ? AND user_id = ?")
+    .get(id, req.user.id);
   if (!existing) return res.status(404).json({ error: "Habitude introuvable" });
 
   const name = req.body?.name !== undefined ? String(req.body.name).trim() : existing.name;
@@ -133,9 +221,11 @@ app.put("/api/habits/:id", (req, res) => {
 });
 
 // Delete a habit (and its logs via cascade)
-app.delete("/api/habits/:id", (req, res) => {
+app.delete("/api/habits/:id", requireAuth, (req, res) => {
   const id = Number(req.params.id);
-  const info = db.prepare("DELETE FROM habits WHERE id = ?").run(id);
+  const info = db
+    .prepare("DELETE FROM habits WHERE id = ? AND user_id = ?")
+    .run(id, req.user.id);
   if (info.changes === 0) return res.status(404).json({ error: "Habitude introuvable" });
   res.status(204).end();
 });
@@ -143,21 +233,27 @@ app.delete("/api/habits/:id", (req, res) => {
 // --- Logs (daily completions) ---
 
 // Get completed habit ids for a given date
-app.get("/api/logs", (req, res) => {
+app.get("/api/logs", requireAuth, (req, res) => {
   const date = req.query.date;
   if (!isValidDate(date)) return res.status(400).json({ error: "Date invalide (YYYY-MM-DD)" });
-  const rows = db.prepare("SELECT habit_id FROM logs WHERE date = ?").all(date);
+  const rows = db
+    .prepare(
+      "SELECT l.habit_id FROM logs l JOIN habits h ON h.id = l.habit_id WHERE l.date = ? AND h.user_id = ?"
+    )
+    .all(date, req.user.id);
   res.json(rows.map((r) => r.habit_id));
 });
 
 // Toggle a habit completion for a date
-app.post("/api/logs/toggle", (req, res) => {
+app.post("/api/logs/toggle", requireAuth, (req, res) => {
   const habitId = Number(req.body?.habit_id);
   const date = req.body?.date;
   if (!habitId || !isValidDate(date))
     return res.status(400).json({ error: "habit_id et date (YYYY-MM-DD) requis" });
 
-  const habit = db.prepare("SELECT id FROM habits WHERE id = ?").get(habitId);
+  const habit = db
+    .prepare("SELECT id FROM habits WHERE id = ? AND user_id = ?")
+    .get(habitId, req.user.id);
   if (!habit) return res.status(404).json({ error: "Habitude introuvable" });
 
   const existing = db
@@ -178,7 +274,7 @@ app.post("/api/logs/toggle", (req, res) => {
 // Returns, for a given month (YYYY-MM):
 //  - daysInMonth
 //  - per-habit completion counts + the list of completed days
-app.get("/api/summary", (req, res) => {
+app.get("/api/summary", requireAuth, (req, res) => {
   const month = req.query.month;
   if (!isValidMonth(month)) return res.status(400).json({ error: "Mois invalide (YYYY-MM)" });
 
@@ -187,12 +283,14 @@ app.get("/api/summary", (req, res) => {
   const prefix = `${month}-%`;
 
   const habits = db
-    .prepare("SELECT * FROM habits WHERE archived = 0 ORDER BY sort_order, id")
-    .all();
+    .prepare("SELECT * FROM habits WHERE archived = 0 AND user_id = ? ORDER BY sort_order, id")
+    .all(req.user.id);
 
   const logRows = db
-    .prepare("SELECT habit_id, date FROM logs WHERE date LIKE ? ORDER BY date")
-    .all(prefix);
+    .prepare(
+      "SELECT l.habit_id, l.date FROM logs l JOIN habits h ON h.id = l.habit_id WHERE h.user_id = ? AND l.date LIKE ? ORDER BY l.date"
+    )
+    .all(req.user.id, prefix);
 
   const byHabit = new Map();
   for (const row of logRows) {
@@ -231,18 +329,20 @@ app.get("/api/summary", (req, res) => {
 
 // Returns, for a given year, the monthly completion count (12 values, Jan..Dec)
 // for each habit. Used by the "Synthèse" view to draw a per-month chart.
-app.get("/api/trends", (req, res) => {
+app.get("/api/trends", requireAuth, (req, res) => {
   const year = req.query.year;
   if (typeof year !== "string" || !/^\d{4}$/.test(year))
     return res.status(400).json({ error: "Année invalide (YYYY)" });
 
   const habits = db
-    .prepare("SELECT * FROM habits WHERE archived = 0 ORDER BY sort_order, id")
-    .all();
+    .prepare("SELECT * FROM habits WHERE archived = 0 AND user_id = ? ORDER BY sort_order, id")
+    .all(req.user.id);
 
   const rows = db
-    .prepare("SELECT habit_id, date FROM logs WHERE date LIKE ?")
-    .all(`${year}-%`);
+    .prepare(
+      "SELECT l.habit_id, l.date FROM logs l JOIN habits h ON h.id = l.habit_id WHERE h.user_id = ? AND l.date LIKE ?"
+    )
+    .all(req.user.id, `${year}-%`);
 
   const habitMap = new Map(habits.map((h) => [h.id, h]));
   const monthly = new Map(); // habit_id -> [12] complétions brutes
@@ -286,12 +386,14 @@ app.get("/api/trends", (req, res) => {
 // --- Per-habit calendar ---
 
 // Liste des dates où une habitude a été réalisée dans un mois donné.
-app.get("/api/habits/:id/calendar", (req, res) => {
+app.get("/api/habits/:id/calendar", requireAuth, (req, res) => {
   const id = Number(req.params.id);
   const month = req.query.month;
   if (!isValidMonth(month)) return res.status(400).json({ error: "Mois invalide (YYYY-MM)" });
 
-  const habit = db.prepare("SELECT * FROM habits WHERE id = ?").get(id);
+  const habit = db
+    .prepare("SELECT * FROM habits WHERE id = ? AND user_id = ?")
+    .get(id, req.user.id);
   if (!habit) return res.status(404).json({ error: "Habitude introuvable" });
 
   const rows = db

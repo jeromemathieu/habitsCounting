@@ -5,6 +5,11 @@ const api = async (url, opts) => {
     headers: { "Content-Type": "application/json" },
     ...opts,
   });
+  if (res.status === 401) {
+    // Session expirée ou absente : on revient à l'écran de connexion.
+    document.body.classList.remove("authed");
+    throw new Error("Session expirée, reconnecte-toi.");
+  }
   if (!res.ok && res.status !== 204) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Erreur ${res.status}`);
@@ -701,5 +706,77 @@ function escapeHtml(s) {
   );
 }
 
-// --- Init ---
-renderDay();
+// --- Authentification (frontend) ---
+let authMode = "login"; // login | register
+
+function showAuthError(msg) {
+  const el = $("#auth-error");
+  el.textContent = msg;
+  el.classList.remove("hidden");
+}
+function hideAuthError() {
+  $("#auth-error").classList.add("hidden");
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  const login = mode === "login";
+  $("#auth-submit").textContent = login ? "Se connecter" : "Créer mon compte";
+  $("#auth-subtitle").textContent = login
+    ? "Connecte-toi pour accéder à tes habitudes."
+    : "Crée ton compte pour commencer.";
+  $("#auth-switch-text").textContent = login ? "Pas encore de compte ?" : "Déjà un compte ?";
+  $("#auth-switch-btn").textContent = login ? "Créer un compte" : "Se connecter";
+  $("#auth-password").setAttribute("autocomplete", login ? "current-password" : "new-password");
+  hideAuthError();
+}
+
+$("#auth-switch-btn").addEventListener("click", () =>
+  setAuthMode(authMode === "login" ? "register" : "login")
+);
+
+$("#auth-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  hideAuthError();
+  const email = $("#auth-email").value.trim();
+  const password = $("#auth-password").value;
+  const url = authMode === "login" ? "/api/auth/login" : "/api/auth/register";
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      throw new Error(b.error || `Erreur ${res.status}`);
+    }
+    const user = await res.json();
+    $("#auth-password").value = "";
+    enterApp(user);
+  } catch (err) {
+    showAuthError(err.message);
+  }
+});
+
+$("#logout-btn").addEventListener("click", async () => {
+  await fetch("/api/auth/logout", { method: "POST" });
+  location.reload();
+});
+
+function enterApp(user) {
+  document.body.classList.add("authed");
+  $("#user-email").textContent = user.email;
+  renderDay();
+}
+
+// --- Init : vérifie la session puis affiche l'app ou l'écran de connexion ---
+(async function init() {
+  try {
+    const res = await fetch("/api/auth/me");
+    if (res.ok) enterApp(await res.json());
+    else setAuthMode("login");
+  } catch {
+    setAuthMode("login");
+  }
+})();
