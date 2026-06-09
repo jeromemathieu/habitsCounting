@@ -186,16 +186,18 @@ async function drawCalendar() {
   const today = toISODate(new Date());
   const color = getHabitColor();
 
-  const grid = $("#calendar-grid");
-  grid.innerHTML = "";
-
-  // En-têtes L M M J V S D
+  // En-têtes L M M J V S D (grille séparée, hauteur indépendante des cases)
+  const head = $("#cal-weekdays");
+  head.innerHTML = "";
   for (const { label } of WEEKDAYS) {
     const h = document.createElement("div");
     h.className = "cal-head";
     h.textContent = label;
-    grid.appendChild(h);
+    head.appendChild(h);
   }
+
+  const grid = $("#calendar-grid");
+  grid.innerHTML = "";
 
   // Cases vides avant le 1er (lundi en première colonne)
   const firstDow = new Date(y, m - 1, 1).getDay(); // 0=dim..6=sam
