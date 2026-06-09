@@ -95,6 +95,7 @@ Toutes les routes `/api` (hors authentification) requièrent une session valide
 | `POST`   | `/api/auth/login`          | Connexion `{email, password}`                 |
 | `POST`   | `/api/auth/logout`         | Déconnexion                                   |
 | `GET`    | `/api/auth/me`             | Utilisateur courant (ou 401)                  |
+| `PUT`    | `/api/auth/password`       | Changer son mot de passe `{current_password, new_password}` |
 | `GET`    | `/api/habits`              | Liste des habitudes actives                   |
 | `POST`   | `/api/habits`              | Créer une habitude `{name, color, days, start_date, end_date}` |
 | `PUT`    | `/api/habits/:id`          | Modifier une habitude                         |

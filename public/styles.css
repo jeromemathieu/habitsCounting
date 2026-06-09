@@ -780,6 +780,25 @@ main {
 }
 .share-title { font-size: 1.1rem; margin: 0 0 0.3rem; }
 .share-help { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.9rem; }
+.password-form { display: flex; flex-direction: column; gap: 0.5rem; max-width: 360px; }
+.password-form input {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 1rem;
+  background: var(--card);
+  color: var(--text);
+}
+.password-form button {
+  padding: 0.6rem 1.1rem;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
 .share-form { display: flex; gap: 0.5rem; }
 .share-form input {
   flex: 1;

@@ -173,6 +173,18 @@
         <p id="manage-empty" class="empty hidden">Aucune habitude. Ajoute ta première ci-dessus.</p>
 
         <div class="share-section">
+          <h2 class="share-title">Mon compte</h2>
+          <p class="share-help">Change ton mot de passe. Tes autres appareils seront déconnectés.</p>
+          <form id="password-form" class="password-form">
+            <input type="password" id="pw-current" placeholder="Mot de passe actuel" autocomplete="current-password" required />
+            <input type="password" id="pw-new" placeholder="Nouveau mot de passe (8 car. min.)" autocomplete="new-password" minlength="8" required />
+            <input type="password" id="pw-confirm" placeholder="Confirmer le nouveau mot de passe" autocomplete="new-password" required />
+            <button type="submit">Changer le mot de passe</button>
+          </form>
+          <p id="pw-msg" class="share-msg hidden"></p>
+        </div>
+
+        <div class="share-section">
           <h2 class="share-title">Partage en lecture</h2>
           <p class="share-help">Partage la consultation de tes habitudes avec un autre utilisateur (par son email). Il les verra en lecture seule dans son onglet « Partagé ».</p>
           <form id="share-form" class="share-form">

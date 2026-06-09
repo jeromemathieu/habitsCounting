@@ -996,6 +996,32 @@ async function renderShares() {
   }
 }
 
+$("#password-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("#pw-msg");
+  msg.classList.remove("hidden");
+  const current = $("#pw-current").value;
+  const next = $("#pw-new").value;
+  const confirm = $("#pw-confirm").value;
+  if (next !== confirm) {
+    msg.textContent = "Les deux nouveaux mots de passe ne correspondent pas.";
+    msg.className = "share-msg err";
+    return;
+  }
+  try {
+    await api("/api/auth/password", {
+      method: "PUT",
+      body: JSON.stringify({ current_password: current, new_password: next }),
+    });
+    $("#password-form").reset();
+    msg.textContent = "Mot de passe changé ✓";
+    msg.className = "share-msg ok";
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = "share-msg err";
+  }
+});
+
 $("#share-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const email = $("#share-email").value.trim();

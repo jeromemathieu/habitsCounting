@@ -132,6 +132,23 @@ app.get("/api/auth/me", (req, res) => {
   res.json(req.user);
 });
 
+// Changer son propre mot de passe.
+app.put("/api/auth/password", requireAuth, (req, res) => {
+  const current = String(req.body?.current_password || "");
+  const next = String(req.body?.new_password || "");
+  if (next.length < 8)
+    return res.status(400).json({ error: "Nouveau mot de passe : 8 caractères minimum" });
+
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+  if (!verifyPassword(current, user.password))
+    return res.status(401).json({ error: "Mot de passe actuel incorrect" });
+
+  db.prepare("UPDATE users SET password = ? WHERE id = ?").run(hashPassword(next), req.user.id);
+  // Invalide les autres sessions (déconnexion des autres appareils).
+  db.prepare("DELETE FROM sessions WHERE user_id = ? AND token <> ?").run(req.user.id, req.sessionToken);
+  res.json({ ok: true });
+});
+
 // --- Administration (console) ---
 
 // Connexion admin (identifiants d'environnement).
