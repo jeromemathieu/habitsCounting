@@ -27,6 +27,24 @@ Puis ouvrir http://localhost:3000
 
 En développement (rechargement auto) : `npm run dev`
 
+## Avec Docker
+
+Avec **docker compose** (recommandé — la base SQLite est conservée dans un volume) :
+
+```bash
+docker compose up --build
+```
+
+Puis ouvrir http://localhost:3000. Les données persistent dans le volume
+`habits-data` entre les redémarrages.
+
+Sans compose, en image seule :
+
+```bash
+docker build -t habits-counting .
+docker run -p 3000:3000 -v habits-data:/data habits-counting
+```
+
 ## Configuration
 
 | Variable  | Défaut          | Description                          |
