@@ -8,6 +8,9 @@ Application web pour **noter chaque jour les actions réalisées** et obtenir un
 - **Comptes & authentification** : inscription / connexion par email + mot de
   passe ; chaque utilisateur ne voit que ses propres habitudes. Sessions par
   cookie httpOnly, mots de passe hachés (scrypt).
+- **Partage en lecture** : partager la consultation de ses habitudes avec un
+  autre utilisateur (par email) ; il les voit en lecture seule dans l'onglet
+  « Partagé ». Les écritures restent toujours limitées à ses propres données.
 - **Mes habitudes** : créer, renommer, recolorer et supprimer tes habitudes.
 - **Jour** : cocher d'un clic les habitudes réalisées, naviguer entre les jours.
 - **Récap mensuel** : nombre d'actions cochées, régularité moyenne, et une barre
@@ -90,6 +93,14 @@ Toutes les routes `/api` (hors authentification) requièrent une session valide
 | `GET`    | `/api/summary?month=YYYY-MM`| Récapitulatif mensuel                        |
 | `GET`    | `/api/trends?year=YYYY`    | Complétions par mois et par habitude (synthèse) |
 | `GET`    | `/api/habits/:id/calendar?month=YYYY-MM` | Dates réalisées + jours prévus, pour le calendrier |
+| `GET`    | `/api/shares`              | Personnes avec qui je partage (sortant)       |
+| `POST`   | `/api/shares`              | Partager avec `{email}`                       |
+| `DELETE` | `/api/shares/:id`          | Révoquer un partage                           |
+| `GET`    | `/api/shared`              | Personnes qui partagent avec moi (entrant)    |
+
+> Les routes de **lecture** (`/api/habits`, `/api/logs`, `/api/summary`,
+> `/api/trends`, `/api/notes`, calendrier) acceptent `?owner=<id>` pour
+> consulter les données d'un utilisateur qui m'a accordé un partage.
 
 ## Modèle de données
 
@@ -104,6 +115,8 @@ Toutes les routes `/api` (hors authentification) requièrent une session valide
   (contrainte d'unicité sur `(habit_id, date)`)
 - `notes` : id, habit_id, date, text — un commentaire par habitude et par jour
   (contrainte d'unicité sur `(habit_id, date)`)
+- `shares` : id, owner_id, viewer_id — partage en lecture du propriétaire vers
+  le lecteur (contrainte d'unicité sur `(owner_id, viewer_id)`)
 
 > **Migration** : au démarrage, les colonnes manquantes sont ajoutées
 > automatiquement. La **première inscription** récupère les habitudes

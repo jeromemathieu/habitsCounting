@@ -772,6 +772,60 @@ main {
 .icon-btn:hover { background: var(--bg); }
 .icon-btn.danger:hover { color: #dc2626; }
 
+/* Partage */
+.share-section {
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+.share-title { font-size: 1.1rem; margin: 0 0 0.3rem; }
+.share-help { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.9rem; }
+.share-form { display: flex; gap: 0.5rem; }
+.share-form input {
+  flex: 1;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 1rem;
+  background: var(--card);
+  color: var(--text);
+}
+.share-form button {
+  padding: 0 1.1rem;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.share-msg { font-size: 0.88rem; margin: 0.6rem 0 0; }
+.share-msg.ok { color: #16a34a; }
+.share-msg.err { color: #dc2626; }
+.share-list { list-style: none; margin: 0.9rem 0 0; padding: 0; }
+.share-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55rem 0.8rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Vue Partagé */
+.shared-sub {
+  font-weight: 600;
+  color: var(--muted);
+  margin: 1.25rem 0 0.6rem;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.shared-sub:first-child { margin-top: 0.5rem; }
+
 /* --- Mobile --- */
 @media (max-width: 560px) {
   main { padding: 1rem 0.75rem 4rem; }

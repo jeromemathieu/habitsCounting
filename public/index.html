@@ -39,6 +39,7 @@
         <button class="tab" data-view="calendar">Calendrier</button>
         <button class="tab" data-view="month">Récap mensuel</button>
         <button class="tab" data-view="synthese">Synthèse</button>
+        <button class="tab" data-view="shared">Partagé</button>
         <button class="tab" data-view="manage">Mes habitudes</button>
       </nav>
     </header>
@@ -108,6 +109,15 @@
         <p id="synthese-empty" class="empty hidden">Aucune habitude à synthétiser.</p>
       </section>
 
+      <!-- Vue Partagé (lecture seule) -->
+      <section id="view-shared" class="view">
+        <select id="shared-owner" class="habit-select"></select>
+        <div id="shared-content"></div>
+        <p id="shared-empty" class="empty hidden">
+          Personne ne partage ses habitudes avec toi pour l'instant.
+        </p>
+      </section>
+
       <!-- Vue Gestion -->
       <section id="view-manage" class="view">
         <form id="habit-form" class="habit-form">
@@ -125,6 +135,17 @@
         </form>
         <ul id="manage-list" class="manage-list"></ul>
         <p id="manage-empty" class="empty hidden">Aucune habitude. Ajoute ta première ci-dessus.</p>
+
+        <div class="share-section">
+          <h2 class="share-title">Partage en lecture</h2>
+          <p class="share-help">Partage la consultation de tes habitudes avec un autre utilisateur (par son email). Il les verra en lecture seule dans son onglet « Partagé ».</p>
+          <form id="share-form" class="share-form">
+            <input type="email" id="share-email" placeholder="Email de la personne" required />
+            <button type="submit">Partager</button>
+          </form>
+          <p id="share-msg" class="share-msg hidden"></p>
+          <ul id="share-list" class="share-list"></ul>
+        </div>
       </section>
     </main>
 

@@ -118,6 +118,7 @@ document.querySelectorAll(".tab").forEach((tab) => {
     if (view === "calendar") renderCalendar();
     if (view === "month") renderMonth();
     if (view === "synthese") renderSynthese();
+    if (view === "shared") renderShared();
     if (view === "manage") renderManage();
   });
 });
@@ -686,8 +687,122 @@ $("#year-picker").addEventListener("change", (e) => {
 $("#prev-year").addEventListener("click", () => { currentYear--; renderSynthese(); });
 $("#next-year").addEventListener("click", () => { currentYear++; renderSynthese(); });
 
+// --- Shared view (consultation des habitudes partagées avec moi) ---
+let sharedOwnerId = null;
+
+async function renderShared() {
+  const owners = await api("/api/shared");
+  $("#shared-empty").classList.toggle("hidden", owners.length > 0);
+  const sel = $("#shared-owner");
+  sel.style.display = owners.length ? "" : "none";
+  $("#shared-content").innerHTML = "";
+  if (!owners.length) {
+    sharedOwnerId = null;
+    return;
+  }
+  if (sharedOwnerId === null || !owners.some((o) => o.id === sharedOwnerId)) {
+    sharedOwnerId = owners[0].id;
+  }
+  sel.innerHTML = "";
+  for (const o of owners) {
+    const opt = document.createElement("option");
+    opt.value = o.id;
+    opt.textContent = o.email;
+    if (o.id === sharedOwnerId) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  await drawShared();
+}
+
+async function drawShared() {
+  const today = toISODate(new Date());
+  const month = today.slice(0, 7);
+  const [summary, doneIds] = await Promise.all([
+    api(`/api/summary?owner=${sharedOwnerId}&month=${month}`),
+    api(`/api/logs?date=${today}&owner=${sharedOwnerId}`),
+  ]);
+  const doneSet = new Set(doneIds);
+  const wrap = $("#shared-content");
+
+  if (!summary.habits.length) {
+    wrap.innerHTML = '<p class="empty">Cette personne n\'a pas encore d\'habitude.</p>';
+    return;
+  }
+
+  let html = `<p class="shared-sub">Aujourd'hui — ${frDate(today)}</p>`;
+  html += '<ul class="habit-checklist">';
+  for (const h of summary.habits) {
+    const done = doneSet.has(h.id);
+    html += `<li class="habit-item ${done ? "done" : ""}" style="${done ? `background:${h.color}1a` : ""}">
+      <div class="habit-main" style="cursor:default">
+        <span class="dot" style="background:${h.color}"></span>
+        <span class="name">${escapeHtml(h.name)}</span>
+        <span class="checkbox" style="${done ? `background:${h.color};border-color:${h.color}` : ""}">${done ? "✓" : ""}</span>
+      </div></li>`;
+  }
+  html += "</ul>";
+
+  html += `<p class="shared-sub">Régularité — ${frMonth(month)}</p>`;
+  for (const h of summary.habits) {
+    html += `<div class="summary-row">
+      <div class="top">
+        <span class="dot" style="background:${h.color}"></span>
+        <span class="name">${escapeHtml(h.name)}</span>
+        <span class="count">${h.count} / ${h.scheduled} j prévus · ${h.rate}%</span>
+      </div>
+      <div class="bar"><span style="width:${h.rate}%;background:${h.color}"></span></div>
+    </div>`;
+  }
+  wrap.innerHTML = html;
+}
+
+$("#shared-owner").addEventListener("change", (e) => {
+  sharedOwnerId = Number(e.target.value);
+  drawShared();
+});
+
+// --- Gestion des partages (qui peut voir mes habitudes) ---
+async function renderShares() {
+  const shares = await api("/api/shares");
+  const list = $("#share-list");
+  list.innerHTML = "";
+  for (const s of shares) {
+    const li = document.createElement("li");
+    li.className = "share-item";
+    const span = document.createElement("span");
+    span.textContent = s.email;
+    const del = document.createElement("button");
+    del.className = "icon-btn danger";
+    del.textContent = "✕";
+    del.title = "Révoquer le partage";
+    del.addEventListener("click", async () => {
+      await api("/api/shares/" + s.id, { method: "DELETE" });
+      renderShares();
+    });
+    li.append(span, del);
+    list.appendChild(li);
+  }
+}
+
+$("#share-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = $("#share-email").value.trim();
+  const msg = $("#share-msg");
+  try {
+    await api("/api/shares", { method: "POST", body: JSON.stringify({ email }) });
+    $("#share-email").value = "";
+    msg.textContent = "Partagé ✓";
+    msg.className = "share-msg ok";
+    renderShares();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = "share-msg err";
+  }
+});
+
 // --- Manage view ---
 async function renderManage() {
+  renderShares();
   const habits = await api("/api/habits");
   const list = $("#manage-list");
   list.innerHTML = "";

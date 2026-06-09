@@ -55,6 +55,19 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_notes_date ON notes(date);
   CREATE INDEX IF NOT EXISTS idx_notes_habit ON notes(habit_id);
+
+  CREATE TABLE IF NOT EXISTS shares (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id   INTEGER NOT NULL,
+    viewer_id  INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (owner_id)  REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (viewer_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE (owner_id, viewer_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_shares_viewer ON shares(viewer_id);
+  CREATE INDEX IF NOT EXISTS idx_shares_owner ON shares(owner_id);
 `);
 
 // --- Migrations ---
