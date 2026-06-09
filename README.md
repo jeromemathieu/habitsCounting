@@ -13,14 +13,16 @@ Application web pour **noter chaque jour les actions réalisées** et obtenir un
   elle s'applique. Le taux de régularité se calcule sur ces jours-là.
 - **Calendrier** : pour une habitude donnée, un calendrier mensuel cliquable
   pour cocher/décocher directement les jours réalisés.
-- **Synthèse** : graphique de l'évolution mois par mois sur une année, avec
-  filtre par habitude et 3 modes (nombre, taux %, cumulé empilé).
+- **Synthèse** : graphique interactif (Chart.js) de l'évolution mois par mois
+  sur une année, avec filtre par habitude et 3 modes (nombre, taux %,
+  cumulé empilé).
 
 ## Stack
 
 - Backend : **Node.js** + **Express**
 - Base de données : **SQLite** (fichier `data.sqlite`, via `better-sqlite3`)
 - Frontend : **HTML / CSS / JS** purs (servis en statique), sans framework.
+  Graphiques via **Chart.js** (vendoré en local dans `public/vendor/`, aucun CDN).
 
 ## Démarrage
 

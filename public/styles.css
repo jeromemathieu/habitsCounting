@@ -266,11 +266,12 @@ main {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 1rem 0.75rem 0.5rem;
+  padding: 1rem;
   box-shadow: var(--shadow);
-  overflow-x: auto;
+  position: relative;
+  height: 360px;
 }
-.chart-wrap svg { display: block; width: 100%; height: auto; }
+.chart-wrap canvas { display: block; width: 100% !important; height: 100% !important; }
 .chart-empty {
   text-align: center;
   color: var(--muted);

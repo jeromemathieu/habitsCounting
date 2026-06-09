@@ -378,91 +378,88 @@ function renderFilter(habits) {
   }
 }
 
+let chartInstance = null;
+
+// Convertit une couleur hex (#rrggbb) en rgba avec alpha.
+function hexAlpha(hex, alpha) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
 function drawChart() {
   const wrap = $("#chart-wrap");
-  if (!trendsCache || trendsCache.habits.length === 0) {
-    wrap.innerHTML = '<div class="chart-empty">Aucune donnée.</div>';
-    return;
-  }
-  const shown = trendsCache.habits.filter((h) => selectedHabits.has(h.id));
-  if (shown.length === 0) {
-    wrap.innerHTML = '<div class="chart-empty">Sélectionne au moins une habitude.</div>';
-    return;
-  }
+  const showMessage = (msg) => {
+    if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+    wrap.innerHTML = `<div class="chart-empty">${msg}</div>`;
+  };
 
-  // Géométrie
-  const W = 900, H = 380;
-  const padL = 44, padR = 16, padT = 20, padB = 36;
-  const plotW = W - padL - padR;
-  const plotH = H - padT - padB;
-  const x = (i) => padL + (plotW * i) / 11;
+  if (!trendsCache || trendsCache.habits.length === 0) return showMessage("Aucune donnée.");
+  const shown = trendsCache.habits.filter((h) => selectedHabits.has(h.id));
+  if (shown.length === 0) return showMessage("Sélectionne au moins une habitude.");
 
   const isRate = chartMode === "rate";
   const isStacked = chartMode === "stacked";
-
-  // Valeur affichée par habitude/mois selon le mode
   const valOf = (h, i) =>
     isRate ? (h.scheduled[i] ? Math.round((h.monthly[i] / h.scheduled[i]) * 100) : 0) : h.monthly[i];
 
-  // Échelle Y
-  let yMax;
-  if (isRate) {
-    yMax = 100;
-  } else if (isStacked) {
-    const totals = Array.from({ length: 12 }, (_, i) =>
-      shown.reduce((s, h) => s + h.monthly[i], 0));
-    const maxVal = Math.max(1, ...totals);
-    yMax = Math.max(5, Math.ceil(maxVal / 5) * 5);
-  } else {
-    const maxVal = Math.max(1, ...shown.flatMap((h) => h.monthly));
-    yMax = Math.max(5, Math.ceil(maxVal / 5) * 5);
-  }
-  const y = (v) => padT + plotH - (plotH * v) / yMax;
+  const datasets = shown.map((h) => ({
+    label: h.name,
+    data: h.monthly.map((_, i) => valOf(h, i)),
+    borderColor: h.color,
+    backgroundColor: isStacked ? h.color : hexAlpha(h.color, 0.12),
+    fill: false,
+    tension: 0.35,
+    borderWidth: 2.5,
+    pointRadius: 3,
+    pointHoverRadius: 5,
+    pointBackgroundColor: h.color,
+    borderRadius: isStacked ? 6 : 0,
+    maxBarThickness: 26,
+  }));
 
-  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Évolution mensuelle">`;
+  // (Re)crée le canvas
+  if (!$("#chart-canvas")) wrap.innerHTML = '<canvas id="chart-canvas"></canvas>';
+  const ctx = $("#chart-canvas");
 
-  // Grille horizontale + labels Y
-  for (let g = 0; g <= 5; g++) {
-    const val = Math.round((yMax / 5) * g);
-    const gy = y(val);
-    svg += `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="#e5e7eb" stroke-width="1"/>`;
-    svg += `<text x="${padL - 8}" y="${gy + 4}" font-size="11" fill="#6b7280" text-anchor="end">${val}${isRate ? "%" : ""}</text>`;
-  }
-  // Labels X (mois)
-  for (let i = 0; i < 12; i++) {
-    svg += `<text x="${x(i)}" y="${H - 12}" font-size="11" fill="#6b7280" text-anchor="middle">${MONTHS_FR[i]}</text>`;
-  }
-
-  if (isStacked) {
-    // Barres empilées : un segment par habitude, cumul du nombre de complétions.
-    const slot = plotW / 12;
-    const bw = slot * 0.6;
-    for (let i = 0; i < 12; i++) {
-      const cx = padL + slot * i + slot / 2;
-      let acc = 0;
-      for (const h of shown) {
-        const v = h.monthly[i];
-        if (v <= 0) continue;
-        const yTop = y(acc + v);
-        const hgt = y(acc) - yTop;
-        svg += `<rect x="${cx - bw / 2}" y="${yTop}" width="${bw}" height="${hgt}" fill="${h.color}"><title>${escapeHtml(h.name)} — ${MONTHS_FR[i]} : ${v}</title></rect>`;
-        acc += v;
-      }
-    }
-  } else {
-    // Lignes : une par habitude (nombre ou taux %)
-    for (const h of shown) {
-      const pts = h.monthly.map((_, i) => `${x(i)},${y(valOf(h, i))}`).join(" ");
-      svg += `<polyline points="${pts}" fill="none" stroke="${h.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
-      h.monthly.forEach((_, i) => {
-        const v = valOf(h, i);
-        svg += `<circle cx="${x(i)}" cy="${y(v)}" r="3.5" fill="${h.color}"><title>${escapeHtml(h.name)} — ${MONTHS_FR[i]} : ${v}${isRate ? "%" : ""}</title></circle>`;
-      });
-    }
-  }
-
-  svg += `</svg>`;
-  wrap.innerHTML = svg;
+  if (chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(ctx, {
+    type: isStacked ? "bar" : "line",
+    data: { labels: MONTHS_FR, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 500 },
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false }, // on garde nos « chips » de filtre à la place
+        tooltip: {
+          callbacks: {
+            label: (c) => `${c.dataset.label} : ${c.parsed.y}${isRate ? " %" : ""}`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          stacked: isStacked,
+          grid: { display: false },
+          ticks: { color: "#6b7280" },
+        },
+        y: {
+          stacked: isStacked,
+          beginAtZero: true,
+          ...(isRate ? { max: 100 } : {}),
+          grid: { color: "#eceef3" },
+          ticks: {
+            color: "#6b7280",
+            precision: 0,
+            callback: (v) => (isRate ? v + " %" : v),
+          },
+        },
+      },
+    },
+  });
 }
 
 // Sélecteur de mode du graphique
