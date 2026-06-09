@@ -24,7 +24,7 @@ services:
     labels:
       - "traefik.enable=true"
       # ADAPTER : ton domaine
-      - "traefik.http.routers.habits.rule=Host(`habits.tondomaine.com`)"
+      - "traefik.http.routers.habits.rule=Host(`habits.famillemathieu.org`)"
       # ADAPTER : entrypoint HTTPS de ta config Traefik
       - "traefik.http.routers.habits.entrypoints=websecure"
       - "traefik.http.routers.habits.tls=true"
