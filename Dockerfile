@@ -14,7 +14,7 @@ WORKDIR /app
 # Dépendances déjà compilées
 COPY --from=builder /app/node_modules ./node_modules
 COPY package*.json ./
-COPY server.js db.js ./
+COPY *.js ./
 COPY public ./public
 
 # La base SQLite vit dans un volume pour persister entre redémarrages
