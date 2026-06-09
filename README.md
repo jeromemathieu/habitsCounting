@@ -11,6 +11,8 @@ Application web pour **noter chaque jour les actions réalisées** et obtenir un
   de progression par habitude (X jours sur le mois + pourcentage).
 - **Jours prévus** : pour chaque habitude, choix des jours de la semaine où
   elle s'applique. Le taux de régularité se calcule sur ces jours-là.
+- **Période de validité** : dates de début et de fin optionnelles par habitude ;
+  le taux ne compte que les jours prévus dans cette période.
 - **Calendrier** : pour une habitude donnée, un calendrier mensuel cliquable
   pour cocher/décocher directement les jours réalisés.
 - **Synthèse** : graphique interactif (Chart.js) de l'évolution mois par mois
@@ -76,8 +78,10 @@ docker run -p 3000:3000 -v habits-data:/data habits-counting
 
 ## Modèle de données
 
-- `habits` : id, name, color, sort_order, archived, created_at, days
+- `habits` : id, name, color, sort_order, archived, created_at, days,
+  start_date, end_date
   (`days` = masque de 7 caractères '1'/'0', indexé par `getDay()` :
-  0 = dimanche … 6 = samedi)
+  0 = dimanche … 6 = samedi ; `start_date`/`end_date` optionnelles, bornent
+  le calcul du taux)
 - `logs` : id, habit_id, date — une ligne = habitude cochée ce jour
   (contrainte d'unicité sur `(habit_id, date)`)

@@ -34,12 +34,26 @@ function normalizeDays(input) {
   return out.includes("1") ? out : "1111111"; // au moins un jour, sinon tous
 }
 
-// Nombre de jours du mois (YYYY-MM) tombant sur les jours prévus du masque.
-function scheduledDaysInMonth(year, mon, mask) {
+// Valide une date optionnelle : renvoie la date normalisée, null si vide,
+// ou undefined si invalide.
+function normalizeOptionalDate(input) {
+  if (input === undefined || input === null || input === "") return null;
+  if (typeof input === "string" && isValidDate(input)) return input;
+  return undefined;
+}
+
+// Nombre de jours du mois (YYYY-MM) tombant sur les jours prévus du masque,
+// en restant dans la période de validité [start, end] si elle est définie.
+function scheduledDaysInMonth(year, mon, mask, start = null, end = null) {
   const total = new Date(year, mon, 0).getDate();
+  const ym = `${year}-${String(mon).padStart(2, "0")}`;
   let n = 0;
   for (let d = 1; d <= total; d++) {
-    if (mask[new Date(year, mon - 1, d).getDay()] === "1") n++;
+    if (mask[new Date(year, mon - 1, d).getDay()] !== "1") continue;
+    const iso = `${ym}-${String(d).padStart(2, "0")}`; // comparable lexicalement
+    if (start && iso < start) continue;
+    if (end && iso > end) continue;
+    n++;
   }
   return n;
 }
@@ -63,11 +77,20 @@ app.post("/api/habits", (req, res) => {
   const days = req.body?.days !== undefined ? normalizeDays(req.body.days) : "1111111";
   if (days === undefined) return res.status(400).json({ error: "Jours invalides" });
 
+  const startDate = normalizeOptionalDate(req.body?.start_date);
+  const endDate = normalizeOptionalDate(req.body?.end_date);
+  if (startDate === undefined || endDate === undefined)
+    return res.status(400).json({ error: "Date invalide (YYYY-MM-DD)" });
+  if (startDate && endDate && startDate > endDate)
+    return res.status(400).json({ error: "La date de début doit précéder la date de fin" });
+
   const maxOrder =
     db.prepare("SELECT COALESCE(MAX(sort_order), 0) AS m FROM habits").get().m;
   const info = db
-    .prepare("INSERT INTO habits (name, color, sort_order, days) VALUES (?, ?, ?, ?)")
-    .run(name, color, maxOrder + 1, days);
+    .prepare(
+      "INSERT INTO habits (name, color, sort_order, days, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?)"
+    )
+    .run(name, color, maxOrder + 1, days, startDate, endDate);
   const habit = db
     .prepare("SELECT * FROM habits WHERE id = ?")
     .get(info.lastInsertRowid);
@@ -90,7 +113,22 @@ app.put("/api/habits/:id", (req, res) => {
     if (days === undefined) return res.status(400).json({ error: "Jours invalides" });
   }
 
-  db.prepare("UPDATE habits SET name = ?, color = ?, days = ? WHERE id = ?").run(name, color, days, id);
+  let startDate = existing.start_date;
+  if (req.body?.start_date !== undefined) {
+    startDate = normalizeOptionalDate(req.body.start_date);
+    if (startDate === undefined) return res.status(400).json({ error: "Date de début invalide" });
+  }
+  let endDate = existing.end_date;
+  if (req.body?.end_date !== undefined) {
+    endDate = normalizeOptionalDate(req.body.end_date);
+    if (endDate === undefined) return res.status(400).json({ error: "Date de fin invalide" });
+  }
+  if (startDate && endDate && startDate > endDate)
+    return res.status(400).json({ error: "La date de début doit précéder la date de fin" });
+
+  db.prepare(
+    "UPDATE habits SET name = ?, color = ?, days = ?, start_date = ?, end_date = ? WHERE id = ?"
+  ).run(name, color, days, startDate, endDate, id);
   res.json(db.prepare("SELECT * FROM habits WHERE id = ?").get(id));
 });
 
@@ -164,15 +202,22 @@ app.get("/api/summary", (req, res) => {
 
   const summary = habits.map((h) => {
     const days = byHabit.get(h.id) || [];
-    // Le taux se calcule sur les jours prévus de l'habitude, pas sur tout le mois.
-    const scheduled = scheduledDaysInMonth(year, mon, h.days);
+    // Le taux se calcule sur les jours prévus de l'habitude (dans sa période).
+    const scheduled = scheduledDaysInMonth(year, mon, h.days, h.start_date, h.end_date);
+    // Numérateur : complétions tombant sur un jour prévu ET dans la période.
+    const inScope = days.filter((iso) => {
+      if (h.days[new Date(iso + "T00:00:00").getDay()] !== "1") return false;
+      if (h.start_date && iso < h.start_date) return false;
+      if (h.end_date && iso > h.end_date) return false;
+      return true;
+    }).length;
     return {
       id: h.id,
       name: h.name,
       color: h.color,
-      count: days.length,
+      count: inScope,
       scheduled,
-      rate: scheduled ? Math.round((days.length / scheduled) * 100) : 0,
+      rate: scheduled ? Math.round((inScope / scheduled) * 100) : 0,
       days,
     };
   });
@@ -196,31 +241,42 @@ app.get("/api/trends", (req, res) => {
     .all();
 
   const rows = db
-    .prepare(
-      `SELECT habit_id, CAST(substr(date, 6, 2) AS INTEGER) AS mon, COUNT(*) AS c
-       FROM logs WHERE date LIKE ? GROUP BY habit_id, mon`
-    )
+    .prepare("SELECT habit_id, date FROM logs WHERE date LIKE ?")
     .all(`${year}-%`);
 
-  const counts = new Map(); // habit_id -> [12]
-  for (const h of habits) counts.set(h.id, new Array(12).fill(0));
+  const habitMap = new Map(habits.map((h) => [h.id, h]));
+  const monthly = new Map(); // habit_id -> [12] complétions brutes
+  const monthlyScheduled = new Map(); // habit_id -> [12] complétions dans le périmètre
+  for (const h of habits) {
+    monthly.set(h.id, new Array(12).fill(0));
+    monthlyScheduled.set(h.id, new Array(12).fill(0));
+  }
   for (const r of rows) {
-    const arr = counts.get(r.habit_id);
-    if (arr) arr[r.mon - 1] = r.c;
+    const h = habitMap.get(r.habit_id);
+    if (!h) continue;
+    const mon = Number(r.date.slice(5, 7));
+    monthly.get(r.habit_id)[mon - 1]++;
+    // Complétion comptée pour le taux : jour prévu et dans la période.
+    if (h.days[new Date(r.date + "T00:00:00").getDay()] !== "1") continue;
+    if (h.start_date && r.date < h.start_date) continue;
+    if (h.end_date && r.date > h.end_date) continue;
+    monthlyScheduled.get(r.habit_id)[mon - 1]++;
   }
 
   const y = Number(year);
   const result = habits.map((h) => {
     // Jours prévus par mois (pour calculer le taux % côté client).
     const scheduled = [];
-    for (let m = 1; m <= 12; m++) scheduled.push(scheduledDaysInMonth(y, m, h.days));
+    for (let m = 1; m <= 12; m++)
+      scheduled.push(scheduledDaysInMonth(y, m, h.days, h.start_date, h.end_date));
     return {
       id: h.id,
       name: h.name,
       color: h.color,
-      monthly: counts.get(h.id),
+      monthly: monthly.get(h.id),
+      monthlyScheduled: monthlyScheduled.get(h.id),
       scheduled,
-      total: counts.get(h.id).reduce((a, b) => a + b, 0),
+      total: monthly.get(h.id).reduce((a, b) => a + b, 0),
     };
   });
 
@@ -242,7 +298,13 @@ app.get("/api/habits/:id/calendar", (req, res) => {
     .prepare("SELECT date FROM logs WHERE habit_id = ? AND date LIKE ? ORDER BY date")
     .all(id, `${month}-%`);
 
-  res.json({ id, days: habit.days, dates: rows.map((r) => r.date) });
+  res.json({
+    id,
+    days: habit.days,
+    start_date: habit.start_date,
+    end_date: habit.end_date,
+    dates: rows.map((r) => r.date),
+  });
 });
 
 app.listen(PORT, () => {

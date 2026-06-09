@@ -38,5 +38,12 @@ const habitCols = db.prepare("PRAGMA table_info(habits)").all().map((c) => c.nam
 if (!habitCols.includes("days")) {
   db.exec("ALTER TABLE habits ADD COLUMN days TEXT NOT NULL DEFAULT '1111111'");
 }
+// Période de validité optionnelle de l'habitude (NULL = pas de borne).
+if (!habitCols.includes("start_date")) {
+  db.exec("ALTER TABLE habits ADD COLUMN start_date TEXT");
+}
+if (!habitCols.includes("end_date")) {
+  db.exec("ALTER TABLE habits ADD COLUMN end_date TEXT");
+}
 
 export default db;

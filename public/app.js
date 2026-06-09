@@ -206,6 +206,8 @@ async function drawCalendar() {
   const data = await api(`/api/habits/${calHabitId}/calendar?month=${calMonth}`);
   const done = new Set(data.dates);
   const mask = data.days;
+  const start = data.start_date;
+  const end = data.end_date;
   const today = toISODate(new Date());
   const color = getHabitColor();
 
@@ -238,12 +240,14 @@ async function drawCalendar() {
     const iso = `${calMonth}-${String(d).padStart(2, "0")}`;
     const dow = new Date(y, m - 1, d).getDay();
     const isDone = done.has(iso);
-    const scheduled = mask[dow] === "1";
+    const outRange = (start && iso < start) || (end && iso > end);
+    const scheduled = mask[dow] === "1" && !outRange;
     if (scheduled) scheduledCount++;
     if (scheduled && isDone) doneScheduled++;
 
     const cell = document.createElement("div");
     cell.className = "cal-cell";
+    if (outRange) cell.classList.add("out");
     if (scheduled) cell.classList.add("scheduled");
     else cell.classList.add("off");
     if (iso === today) cell.classList.add("today");
@@ -453,7 +457,9 @@ function drawChart() {
   const isRate = chartMode === "rate";
   const isStacked = chartMode === "stacked";
   const valOf = (h, i) =>
-    isRate ? (h.scheduled[i] ? Math.round((h.monthly[i] / h.scheduled[i]) * 100) : 0) : h.monthly[i];
+    isRate
+      ? (h.scheduled[i] ? Math.round((h.monthlyScheduled[i] / h.scheduled[i]) * 100) : 0)
+      : h.monthly[i];
 
   // Dégradé vertical sous une courbe (du plus opaque en haut vers transparent).
   const makeGradient = (color) => (context) => {
@@ -585,29 +591,58 @@ async function renderManage() {
     const daysWrap = document.createElement("div");
     daysWrap.className = "days-picker";
 
+    // Ligne de dates de validité
+    const datesRow = document.createElement("div");
+    datesRow.className = "habit-dates";
+    const start = document.createElement("input");
+    start.type = "date";
+    start.value = h.start_date || "";
+    const end = document.createElement("input");
+    end.type = "date";
+    end.value = h.end_date || "";
+    const lblStart = document.createElement("label");
+    lblStart.append("Début ", start);
+    const lblEnd = document.createElement("label");
+    lblEnd.append("Fin ", end);
+    datesRow.append(lblStart, lblEnd);
+
     const save = async () => {
       const newName = name.value.trim();
       if (!newName) {
         name.value = h.name;
         return;
       }
-      await api("/api/habits/" + h.id, {
-        method: "PUT",
-        body: JSON.stringify({
-          name: newName,
-          color: color.value,
-          days: maskToDays(daysWrap.dataset.mask),
-        }),
-      });
+      try {
+        await api("/api/habits/" + h.id, {
+          method: "PUT",
+          body: JSON.stringify({
+            name: newName,
+            color: color.value,
+            days: maskToDays(daysWrap.dataset.mask),
+            start_date: start.value || null,
+            end_date: end.value || null,
+          }),
+        });
+      } catch (err) {
+        alert(err.message);
+        // restaure les valeurs connues
+        start.value = h.start_date || "";
+        end.value = h.end_date || "";
+        return;
+      }
       h.name = newName;
       h.color = color.value;
       h.days = daysWrap.dataset.mask;
+      h.start_date = start.value || null;
+      h.end_date = end.value || null;
     };
     name.addEventListener("blur", save);
     name.addEventListener("keydown", (e) => {
       if (e.key === "Enter") name.blur();
     });
     color.addEventListener("change", save);
+    start.addEventListener("change", save);
+    end.addEventListener("change", save);
 
     buildDaysPicker(daysWrap, h.days || "1111111", save);
 
@@ -622,7 +657,7 @@ async function renderManage() {
     });
 
     top.append(color, name, del);
-    li.append(top, daysWrap);
+    li.append(top, daysWrap, datesRow);
     list.appendChild(li);
   }
 }
@@ -633,16 +668,25 @@ $("#habit-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const name = $("#habit-name").value.trim();
   if (!name) return;
-  await api("/api/habits", {
-    method: "POST",
-    body: JSON.stringify({
-      name,
-      color: $("#habit-color").value,
-      days: maskToDays($("#new-habit-days").dataset.mask),
-    }),
-  });
+  try {
+    await api("/api/habits", {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        color: $("#habit-color").value,
+        days: maskToDays($("#new-habit-days").dataset.mask),
+        start_date: $("#habit-start").value || null,
+        end_date: $("#habit-end").value || null,
+      }),
+    });
+  } catch (err) {
+    alert(err.message);
+    return;
+  }
   $("#habit-name").value = "";
   $("#habit-color").value = "#4f46e5";
+  $("#habit-start").value = "";
+  $("#habit-end").value = "";
   buildDaysPicker($("#new-habit-days"), "1111111"); // réinitialise à « tous »
   renderManage();
 });

@@ -476,6 +476,10 @@ main {
 }
 .cal-cell.done .cal-dot { background: rgba(255, 255, 255, 0.85); }
 .cal-cell.today { border-color: var(--primary); }
+/* Jour hors période de validité de l'habitude */
+.cal-cell.out { opacity: 0.35; }
+.cal-cell.out:not(.done) { background: repeating-linear-gradient(
+  45deg, var(--bg), var(--bg) 4px, var(--border) 4px, var(--border) 5px); }
 
 /* Légende */
 .cal-legend {
@@ -552,6 +556,28 @@ main {
   align-items: center;
   gap: 0.7rem;
 }
+.habit-dates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.habit-dates label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.habit-dates input[type="date"] {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.3rem 0.4rem;
+  font-size: 0.85rem;
+  background: var(--card);
+  color: var(--text);
+}
+.dates-hint { font-size: 0.78rem; color: var(--muted); }
 .manage-item input[type="color"] {
   width: 34px;
   height: 34px;
