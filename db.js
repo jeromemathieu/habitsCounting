@@ -43,6 +43,18 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_logs_date ON logs(date);
   CREATE INDEX IF NOT EXISTS idx_logs_habit ON logs(habit_id);
+
+  CREATE TABLE IF NOT EXISTS notes (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    habit_id INTEGER NOT NULL,
+    date     TEXT NOT NULL,
+    text     TEXT NOT NULL,
+    FOREIGN KEY (habit_id) REFERENCES habits(id) ON DELETE CASCADE,
+    UNIQUE (habit_id, date)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_notes_date ON notes(date);
+  CREATE INDEX IF NOT EXISTS idx_notes_habit ON notes(habit_id);
 `);
 
 // --- Migrations ---

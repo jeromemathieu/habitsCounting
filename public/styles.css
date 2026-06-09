@@ -232,19 +232,48 @@ main {
 
 .habit-item {
   display: flex;
-  align-items: center;
-  gap: 0.8rem;
+  flex-direction: column;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 0.9rem 1rem;
-  cursor: pointer;
   box-shadow: var(--shadow);
-  transition: transform 0.05s ease;
   user-select: none;
 }
+.habit-main {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  cursor: pointer;
+  transition: transform 0.05s ease;
+}
+.habit-main:active { transform: scale(0.99); }
 
-.habit-item:active { transform: scale(0.99); }
+.note-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.05rem;
+  opacity: 0.4;
+  padding: 0.2rem 0.3rem;
+  border-radius: 6px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.note-btn.has-note { opacity: 1; }
+.note-editor { margin-top: 0.6rem; }
+.note-editor.hidden { display: none; }
+.note-editor textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  font-size: 0.9rem;
+  background: var(--bg);
+  color: var(--text);
+  resize: vertical;
+}
 
 .habit-item .dot {
   width: 14px;
@@ -550,6 +579,61 @@ main {
 }
 .cal-cell.done .cal-dot { background: rgba(255, 255, 255, 0.85); }
 .cal-cell.today { border-color: var(--primary); }
+.cal-cell.selected { box-shadow: 0 0 0 2px var(--primary); }
+/* Indicateur « commentaire » : petit point en haut à droite de la case */
+.cal-cell.has-note::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+.cal-cell.has-note.done::after { background: #fff; }
+.cal-cell { position: relative; }
+
+/* Panneau du jour sélectionné */
+.cal-day-panel {
+  margin-top: 0.9rem;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.cal-day-panel.hidden { display: none; }
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+.panel-date { font-weight: 600; text-transform: capitalize; }
+.panel-toggle {
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+.panel-toggle.done { color: #fff; font-weight: 600; }
+.panel-note {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  font-size: 0.9rem;
+  background: var(--card);
+  color: var(--text);
+  resize: vertical;
+}
+.cal-legend .lg-note { font-size: 0.85rem; line-height: 1; }
 /* Jour hors période de validité de l'habitude (non cliquable) */
 .cal-cell.out { opacity: 0.35; cursor: default; }
 .cal-cell.out:hover { box-shadow: none; }

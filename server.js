@@ -269,6 +269,47 @@ app.post("/api/logs/toggle", requireAuth, (req, res) => {
   }
 });
 
+// --- Notes (commentaire par habitude et par jour) ---
+
+// Notes de toutes les habitudes de l'utilisateur pour une date donnée.
+app.get("/api/notes", requireAuth, (req, res) => {
+  const date = req.query.date;
+  if (!isValidDate(date)) return res.status(400).json({ error: "Date invalide (YYYY-MM-DD)" });
+  const rows = db
+    .prepare(
+      "SELECT n.habit_id, n.text FROM notes n JOIN habits h ON h.id = n.habit_id WHERE n.date = ? AND h.user_id = ?"
+    )
+    .all(date, req.user.id);
+  const out = {};
+  for (const r of rows) out[r.habit_id] = r.text;
+  res.json(out);
+});
+
+// Crée/met à jour (ou supprime si vide) la note d'une habitude pour un jour.
+app.put("/api/notes", requireAuth, (req, res) => {
+  const habitId = Number(req.body?.habit_id);
+  const date = req.body?.date;
+  const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+  if (!habitId || !isValidDate(date))
+    return res.status(400).json({ error: "habit_id et date (YYYY-MM-DD) requis" });
+
+  const habit = db
+    .prepare("SELECT id FROM habits WHERE id = ? AND user_id = ?")
+    .get(habitId, req.user.id);
+  if (!habit) return res.status(404).json({ error: "Habitude introuvable" });
+
+  if (text === "") {
+    db.prepare("DELETE FROM notes WHERE habit_id = ? AND date = ?").run(habitId, date);
+    return res.json({ habit_id: habitId, date, text: "" });
+  }
+
+  db.prepare(
+    `INSERT INTO notes (habit_id, date, text) VALUES (?, ?, ?)
+     ON CONFLICT(habit_id, date) DO UPDATE SET text = excluded.text`
+  ).run(habitId, date, text);
+  res.json({ habit_id: habitId, date, text });
+});
+
 // --- Monthly summary ---
 
 // Returns, for a given month (YYYY-MM):
@@ -400,12 +441,19 @@ app.get("/api/habits/:id/calendar", requireAuth, (req, res) => {
     .prepare("SELECT date FROM logs WHERE habit_id = ? AND date LIKE ? ORDER BY date")
     .all(id, `${month}-%`);
 
+  const noteRows = db
+    .prepare("SELECT date, text FROM notes WHERE habit_id = ? AND date LIKE ?")
+    .all(id, `${month}-%`);
+  const notes = {};
+  for (const n of noteRows) notes[n.date] = n.text;
+
   res.json({
     id,
     days: habit.days,
     start_date: habit.start_date,
     end_date: habit.end_date,
     dates: rows.map((r) => r.date),
+    notes,
   });
 });
 

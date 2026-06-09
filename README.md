@@ -16,8 +16,10 @@ Application web pour **noter chaque jour les actions réalisées** et obtenir un
   elle s'applique. Le taux de régularité se calcule sur ces jours-là.
 - **Période de validité** : dates de début et de fin optionnelles par habitude ;
   le taux ne compte que les jours prévus dans cette période.
-- **Calendrier** : pour une habitude donnée, un calendrier mensuel cliquable
-  pour cocher/décocher directement les jours réalisés.
+- **Calendrier** : pour une habitude donnée, un calendrier mensuel ; un clic sur
+  un jour ouvre un panneau pour le marquer fait/pas fait et y ajouter un commentaire.
+- **Commentaires** : une note libre par habitude et par jour, éditable depuis la
+  vue Jour (bouton 💬) comme depuis le calendrier.
 - **Synthèse** : graphique interactif (Chart.js) de l'évolution mois par mois
   sur une année, avec filtre par habitude et 3 modes (nombre, taux %,
   cumulé empilé).
@@ -83,6 +85,8 @@ Toutes les routes `/api` (hors authentification) requièrent une session valide
 | `DELETE` | `/api/habits/:id`          | Supprimer une habitude (et son historique)    |
 | `GET`    | `/api/logs?date=YYYY-MM-DD`| Ids des habitudes cochées ce jour-là          |
 | `POST`   | `/api/logs/toggle`         | Basculer `{habit_id, date}`                   |
+| `GET`    | `/api/notes?date=YYYY-MM-DD`| Commentaires des habitudes pour ce jour      |
+| `PUT`    | `/api/notes`               | Enregistrer/supprimer `{habit_id, date, text}` |
 | `GET`    | `/api/summary?month=YYYY-MM`| Récapitulatif mensuel                        |
 | `GET`    | `/api/trends?year=YYYY`    | Complétions par mois et par habitude (synthèse) |
 | `GET`    | `/api/habits/:id/calendar?month=YYYY-MM` | Dates réalisées + jours prévus, pour le calendrier |
@@ -97,6 +101,8 @@ Toutes les routes `/api` (hors authentification) requièrent une session valide
   0 = dimanche … 6 = samedi ; `start_date`/`end_date` optionnelles, bornent
   le calcul du taux)
 - `logs` : id, habit_id, date — une ligne = habitude cochée ce jour
+  (contrainte d'unicité sur `(habit_id, date)`)
+- `notes` : id, habit_id, date, text — un commentaire par habitude et par jour
   (contrainte d'unicité sur `(habit_id, date)`)
 
 > **Migration** : au démarrage, les colonnes manquantes sont ajoutées

@@ -81,6 +81,7 @@ let selectedHabits = null; // Set d'ids affichés dans la synthèse (null = tous
 let chartMode = "count"; // count | rate | stacked
 let calHabitId = null; // habitude sélectionnée dans le calendrier
 let calMonth = currentMonth; // mois affiché dans le calendrier
+let calSelectedDate = null; // jour sélectionné dans le calendrier (pour le panneau)
 
 // --- Thème clair / sombre ---
 function applyTheme(theme) {
@@ -126,9 +127,10 @@ async function renderDay() {
   $("#day-picker").value = currentDate;
   $("#day-label").textContent = frDate(currentDate);
 
-  const [habits, doneIds] = await Promise.all([
+  const [habits, doneIds, notes] = await Promise.all([
     api("/api/habits"),
     api("/api/logs?date=" + currentDate),
+    api("/api/notes?date=" + currentDate),
   ]);
   const doneSet = new Set(doneIds);
 
@@ -137,22 +139,65 @@ async function renderDay() {
   $("#day-empty").classList.toggle("hidden", habits.length > 0);
 
   for (const h of habits) {
-    const li = document.createElement("li");
     const done = doneSet.has(h.id);
+    const note = notes[h.id] || "";
+
+    const li = document.createElement("li");
     li.className = "habit-item" + (done ? " done" : "");
     li.style.background = done ? h.color + "1a" : "";
-    li.innerHTML = `
+
+    // Ligne principale (clic = cocher/décocher)
+    const main = document.createElement("div");
+    main.className = "habit-main";
+    main.innerHTML = `
       <span class="dot" style="background:${h.color}"></span>
       <span class="name">${escapeHtml(h.name)}</span>
-      <span class="checkbox" style="${done ? `background:${h.color};border-color:${h.color}` : ""}">${done ? "✓" : ""}</span>
     `;
-    li.addEventListener("click", async () => {
+    const noteBtn = document.createElement("button");
+    noteBtn.className = "note-btn" + (note ? " has-note" : "");
+    noteBtn.textContent = "💬";
+    noteBtn.title = note ? "Modifier le commentaire" : "Ajouter un commentaire";
+    const check = document.createElement("span");
+    check.className = "checkbox";
+    if (done) {
+      check.style.background = h.color;
+      check.style.borderColor = h.color;
+      check.textContent = "✓";
+    }
+    main.append(noteBtn, check);
+
+    // Éditeur de note (déplié par le bouton 💬)
+    const editor = document.createElement("div");
+    editor.className = "note-editor hidden";
+    const ta = document.createElement("textarea");
+    ta.rows = 2;
+    ta.placeholder = "Commentaire pour ce jour…";
+    ta.value = note;
+    editor.appendChild(ta);
+    if (note) editor.classList.remove("hidden");
+
+    main.addEventListener("click", async (e) => {
+      if (e.target === noteBtn) return; // le bouton note ne coche pas
       await api("/api/logs/toggle", {
         method: "POST",
         body: JSON.stringify({ habit_id: h.id, date: currentDate }),
       });
       renderDay();
     });
+    noteBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      editor.classList.toggle("hidden");
+      if (!editor.classList.contains("hidden")) ta.focus();
+    });
+    ta.addEventListener("blur", async () => {
+      const saved = await api("/api/notes", {
+        method: "PUT",
+        body: JSON.stringify({ habit_id: h.id, date: currentDate, text: ta.value.trim() }),
+      });
+      noteBtn.classList.toggle("has-note", !!saved.text);
+    });
+
+    li.append(main, editor);
     list.appendChild(li);
   }
 }
@@ -204,12 +249,16 @@ async function renderCalendar() {
   await drawCalendar();
 }
 
+let calData = null; // dernières données du calendrier (done/notes/période)
+
 async function drawCalendar() {
   const [y, m] = calMonth.split("-").map(Number);
   $("#cal-month-label").textContent = frMonth(calMonth);
 
   const data = await api(`/api/habits/${calHabitId}/calendar?month=${calMonth}`);
+  calData = data;
   const done = new Set(data.dates);
+  const notes = data.notes || {};
   const mask = data.days;
   const start = data.start_date;
   const end = data.end_date;
@@ -252,10 +301,13 @@ async function drawCalendar() {
 
     const cell = document.createElement("div");
     cell.className = "cal-cell";
+    cell.dataset.iso = iso;
     if (outRange) cell.classList.add("out");
     if (scheduled) cell.classList.add("scheduled");
     else cell.classList.add("off");
     if (iso === today) cell.classList.add("today");
+    if (iso === calSelectedDate) cell.classList.add("selected");
+    if (notes[iso]) cell.classList.add("has-note");
     if (isDone) {
       cell.classList.add("done");
       cell.style.background = color;
@@ -272,14 +324,8 @@ async function drawCalendar() {
     if (outRange) {
       cell.title = "Hors période de l'habitude";
     } else {
-      cell.title = scheduled ? "Jour prévu" : "Jour non prévu";
-      cell.addEventListener("click", async () => {
-        await api("/api/logs/toggle", {
-          method: "POST",
-          body: JSON.stringify({ habit_id: calHabitId, date: iso }),
-        });
-        drawCalendar();
-      });
+      cell.title = "Voir / modifier ce jour";
+      cell.addEventListener("click", () => selectCalDay(iso));
     }
     grid.appendChild(cell);
   }
@@ -295,8 +341,71 @@ async function drawCalendar() {
   $("#cal-legend").innerHTML = `
     <span><i class="lg-swatch" style="background:${color}"></i> Réalisé</span>
     <span><i class="lg-dot" style="background:${color}"></i> Jour prévu</span>
+    <span><i class="lg-note">💬</i> Commentaire</span>
     <span><i class="lg-swatch" style="background:var(--bg);border:1.5px solid var(--primary)"></i> Aujourd'hui</span>
   `;
+
+  renderCalPanel(); // (ré)affiche le panneau du jour sélectionné s'il existe
+}
+
+// Sélectionne un jour : surligne la case et ouvre le panneau d'édition.
+function selectCalDay(iso) {
+  calSelectedDate = iso;
+  document
+    .querySelectorAll("#calendar-grid .cal-cell.selected")
+    .forEach((c) => c.classList.remove("selected"));
+  const cell = document.querySelector(`#calendar-grid .cal-cell[data-iso="${iso}"]`);
+  if (cell) cell.classList.add("selected");
+  renderCalPanel();
+}
+
+// Panneau d'un jour : état « fait » + commentaire.
+function renderCalPanel() {
+  const panel = $("#cal-day-panel");
+  if (!calSelectedDate || !calData) {
+    panel.classList.add("hidden");
+    return;
+  }
+  const iso = calSelectedDate;
+  const done = new Set(calData.dates).has(iso);
+  const note = (calData.notes || {})[iso] || "";
+  const color = getHabitColor();
+
+  panel.classList.remove("hidden");
+  panel.innerHTML = `
+    <div class="panel-head">
+      <span class="panel-date">${frDate(iso)}</span>
+      <button class="panel-toggle ${done ? "done" : ""}" id="panel-toggle"
+        style="${done ? `background:${color};border-color:${color}` : ""}">
+        ${done ? "✓ Fait" : "Marquer comme fait"}
+      </button>
+    </div>
+    <textarea id="panel-note" class="panel-note" rows="3"
+      placeholder="Ajouter un commentaire pour ce jour…">${escapeHtml(note)}</textarea>
+  `;
+
+  $("#panel-toggle").addEventListener("click", async () => {
+    await api("/api/logs/toggle", {
+      method: "POST",
+      body: JSON.stringify({ habit_id: calHabitId, date: iso }),
+    });
+    await drawCalendar(); // met à jour case, stats et panneau (sélection conservée)
+  });
+
+  const ta = $("#panel-note");
+  ta.addEventListener("blur", async () => {
+    const text = ta.value.trim();
+    const saved = await api("/api/notes", {
+      method: "PUT",
+      body: JSON.stringify({ habit_id: calHabitId, date: iso, text }),
+    });
+    if (!calData.notes) calData.notes = {};
+    if (saved.text) calData.notes[iso] = saved.text;
+    else delete calData.notes[iso];
+    // met à jour l'indicateur de commentaire sur la case
+    const cell = document.querySelector(`#calendar-grid .cal-cell[data-iso="${iso}"]`);
+    if (cell) cell.classList.toggle("has-note", !!saved.text);
+  });
 }
 
 // Couleur de l'habitude sélectionnée.
@@ -307,6 +416,7 @@ function getHabitColor() {
 
 $("#calendar-habit").addEventListener("change", async (e) => {
   calHabitId = Number(e.target.value);
+  calSelectedDate = null; // la note dépend de l'habitude : on referme le panneau
   await drawCalendar();
 });
 $("#cal-prev-month").addEventListener("click", () => shiftCalMonth(-1));
@@ -316,6 +426,7 @@ function shiftCalMonth(delta) {
   const [y, m] = calMonth.split("-").map(Number);
   const d = new Date(y, m - 1 + delta, 1);
   calMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  calSelectedDate = null;
   drawCalendar();
 }
 
