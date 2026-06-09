@@ -1,0 +1,6 @@
+# Remplace par TON domaine (celui qui pointe vers l'IP du VPS).
+# Caddy obtient et renouvelle le certificat HTTPS automatiquement.
+habits.exemple.com {
+    encode gzip
+    reverse_proxy app:3000
+}

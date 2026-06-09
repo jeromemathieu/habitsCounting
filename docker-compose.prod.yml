@@ -1,0 +1,32 @@
+# Déploiement production : application + Caddy (HTTPS automatique).
+# Usage :  docker compose -f docker-compose.prod.yml up -d --build
+services:
+  app:
+    build: .
+    environment:
+      PORT: 3000
+      DB_PATH: /data/data.sqlite
+    volumes:
+      - habits-data:/data
+    restart: unless-stopped
+    # Pas de ports exposés : seul Caddy est accessible depuis l'extérieur.
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  habits-data:
+  caddy-data:
+  caddy-config:
