@@ -162,30 +162,34 @@ server.registerTool(
   }
 );
 
+const STATUS_LABEL = { done: "fait ✓", missed: "pas fait ✗", none: "remis à zéro" };
+
 server.registerTool(
   "mark_habit",
   {
-    title: "Cocher / décocher une habitude",
+    title: "Marquer une habitude (fait / pas fait / rien)",
     description:
-      "Marque une habitude comme faite (ou non faite) pour une date donnée. La date par défaut est aujourd'hui.",
+      "Définit l'état d'une habitude pour une date : fait (done), pas fait (missed) ou rien (none). Date par défaut : aujourd'hui.",
     inputSchema: {
       habit: z.string().describe("Nom (ou id) de l'habitude"),
+      status: z
+        .enum(["done", "missed", "none"])
+        .optional()
+        .describe("done = fait (défaut), missed = pas fait, none = rien"),
       date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Date YYYY-MM-DD (défaut : aujourd'hui)"),
-      done: z.boolean().optional().describe("true = faite (défaut), false = non faite"),
     },
   },
-  async ({ habit, date, done = true }) => {
+  async ({ habit, status = "done", date }) => {
     const h = await resolveHabit(habit);
     const day = date || todayISO();
-    const checked = await api(`/api/logs?date=${day}`);
-    const isDone = checked.includes(h.id);
-    if (isDone === done)
-      return text(`« ${h.name} » est déjà ${done ? "cochée" : "décochée"} pour le ${day}.`);
-    await api("/api/logs/toggle", {
+    const current = (await api(`/api/logs?date=${day}`))[h.id] || "none";
+    if (current === status)
+      return text(`« ${h.name} » est déjà « ${STATUS_LABEL[status]} » pour le ${day}.`);
+    await api("/api/logs/set", {
       method: "POST",
-      body: JSON.stringify({ habit_id: h.id, date: day }),
+      body: JSON.stringify({ habit_id: h.id, date: day, status }),
     });
-    return text(`« ${h.name} » ${done ? "cochée ✓" : "décochée"} pour le ${day}.`);
+    return text(`« ${h.name} » → ${STATUS_LABEL[status]} pour le ${day}.`);
   }
 );
 
@@ -201,18 +205,22 @@ server.registerTool(
   },
   async ({ date }) => {
     const day = date || todayISO();
-    const [habits, checked, notes] = await Promise.all([
+    const [habits, statuses, notes] = await Promise.all([
       api("/api/habits"),
-      api(`/api/logs?date=${day}`),
+      api(`/api/logs?date=${day}`), // { id: 'done' | 'missed' }
       api(`/api/notes?date=${day}`),
     ]);
     if (!habits.length) return text("Aucune habitude pour l'instant.");
-    const doneSet = new Set(checked);
+    const SYMBOL = { done: "✓ fait", missed: "✗ pas fait" };
+    let doneCount = 0;
     const lines = habits.map((h) => {
+      const st = statuses[h.id];
+      if (st === "done") doneCount++;
+      const label = SYMBOL[st] || "· rien";
       const note = notes[h.id] ? ` — 💬 ${notes[h.id]}` : "";
-      return `- ${doneSet.has(h.id) ? "✓" : "✗"} ${h.name}${note}`;
+      return `- ${label} : ${h.name}${note}`;
     });
-    return text(`Le ${day} : ${doneSet.size}/${habits.length} faites\n${lines.join("\n")}`);
+    return text(`Le ${day} : ${doneCount}/${habits.length} faites\n${lines.join("\n")}`);
   }
 );
 

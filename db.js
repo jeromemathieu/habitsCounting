@@ -101,6 +101,19 @@ if (!habitCols.includes("user_id")) {
 }
 db.exec("CREATE INDEX IF NOT EXISTS idx_habits_user ON habits(user_id)");
 
+// État du log : 'done' (fait) ou 'missed' (pas fait). Pas de ligne = rien.
+// Les lignes existantes (avant cette colonne) sont des « fait ».
+const logCols = db.prepare("PRAGMA table_info(logs)").all().map((c) => c.name);
+if (!logCols.includes("status")) {
+  db.exec("ALTER TABLE logs ADD COLUMN status TEXT NOT NULL DEFAULT 'done'");
+}
+
+// Jeton secret pour le flux iCal (abonnement calendrier en lecture seule).
+const userCols = db.prepare("PRAGMA table_info(users)").all().map((c) => c.name);
+if (!userCols.includes("calendar_token")) {
+  db.exec("ALTER TABLE users ADD COLUMN calendar_token TEXT");
+}
+
 // Partage par habitude : recrée l'ancienne table shares (UNIQUE(owner,viewer))
 // avec une colonne habit_id (NULL = toutes), en conservant les partages existants
 // comme partages « toutes les habitudes ».

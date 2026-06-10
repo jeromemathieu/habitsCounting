@@ -1,4 +1,5 @@
 import express from "express";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import db from "./db.js";
@@ -156,6 +157,85 @@ app.put("/api/auth/password", requireAuth, (req, res) => {
   // Invalide les autres sessions (déconnexion des autres appareils).
   db.prepare("DELETE FROM sessions WHERE user_id = ? AND token <> ?").run(req.user.id, req.sessionToken);
   res.json({ ok: true });
+});
+
+// --- Flux iCal (abonnement calendrier, ex. Google Agenda) ---
+
+function ensureCalendarToken(userId) {
+  const row = db.prepare("SELECT calendar_token FROM users WHERE id = ?").get(userId);
+  if (row && row.calendar_token) return row.calendar_token;
+  const token = crypto.randomBytes(24).toString("hex");
+  db.prepare("UPDATE users SET calendar_token = ? WHERE id = ?").run(token, userId);
+  return token;
+}
+
+// URL d'abonnement de l'utilisateur courant.
+app.get("/api/calendar-url", requireAuth, (req, res) => {
+  const token = ensureCalendarToken(req.user.id);
+  res.json({ url: `${req.protocol}://${req.get("host")}/calendar/${token}.ics` });
+});
+
+// Régénère le jeton (invalide l'ancienne URL).
+app.post("/api/calendar-url/regenerate", requireAuth, (req, res) => {
+  const token = crypto.randomBytes(24).toString("hex");
+  db.prepare("UPDATE users SET calendar_token = ? WHERE id = ?").run(token, req.user.id);
+  res.json({ url: `${req.protocol}://${req.get("host")}/calendar/${token}.ics` });
+});
+
+// Échappe une valeur de texte iCalendar (RFC 5545).
+function icsEscape(s) {
+  return String(s).replace(/[\\;,]/g, (c) => "\\" + c).replace(/\n/g, "\\n");
+}
+
+// Flux iCalendar public, authentifié par le jeton dans l'URL (pas de cookie).
+app.get("/calendar/:token.ics", (req, res) => {
+  const token = req.params.token;
+  const user = token ? db.prepare("SELECT id, email FROM users WHERE calendar_token = ?").get(token) : null;
+  if (!user) return res.status(404).type("text/plain").send("Calendrier introuvable");
+
+  const rows = db
+    .prepare(
+      `SELECT h.name, l.date, l.status, n.text AS note
+       FROM logs l
+       JOIN habits h ON h.id = l.habit_id
+       LEFT JOIN notes n ON n.habit_id = l.habit_id AND n.date = l.date
+       WHERE h.user_id = ? ORDER BY l.date, h.name`
+    )
+    .all(user.id);
+
+  const dtstamp = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Habits Counting//FR",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "X-WR-CALNAME:Mes habitudes",
+    "NAME:Mes habitudes",
+  ];
+  for (const r of rows) {
+    const ymd = r.date.replace(/-/g, "");
+    const [y, m, d] = r.date.split("-").map(Number);
+    const end = new Date(y, m - 1, d + 1); // événement « jour entier »
+    const endYmd = `${end.getFullYear()}${String(end.getMonth() + 1).padStart(2, "0")}${String(end.getDate()).padStart(2, "0")}`;
+    const mark = r.status === "done" ? "✓" : "✗";
+    const suffix = r.status === "done" ? "" : " (pas fait)";
+    lines.push(
+      "BEGIN:VEVENT",
+      `UID:${r.date}-${icsEscape(r.name)}-${r.status}@habits`,
+      `DTSTAMP:${dtstamp}`,
+      `DTSTART;VALUE=DATE:${ymd}`,
+      `DTEND;VALUE=DATE:${endYmd}`,
+      `SUMMARY:${mark} ${icsEscape(r.name)}${suffix}`,
+      ...(r.note ? [`DESCRIPTION:${icsEscape(r.note)}`] : []),
+      "END:VEVENT"
+    );
+  }
+  lines.push("END:VCALENDAR");
+
+  res.type("text/calendar; charset=utf-8");
+  res.setHeader("Content-Disposition", 'inline; filename="habits.ics"');
+  res.send(lines.join("\r\n") + "\r\n");
 });
 
 // --- Administration (console) ---
@@ -458,7 +538,8 @@ app.delete("/api/habits/:id", requireAuth, (req, res) => {
 
 // --- Logs (daily completions) ---
 
-// Get completed habit ids for a given date
+// Statuts des habitudes pour une date : { habit_id: 'done' | 'missed' }.
+// (Une habitude absente de la carte = « rien ».)
 app.get("/api/logs", requireAuth, (req, res) => {
   const date = req.query.date;
   if (!isValidDate(date)) return res.status(400).json({ error: "Date invalide (YYYY-MM-DD)" });
@@ -466,15 +547,43 @@ app.get("/api/logs", requireAuth, (req, res) => {
   if (!acc) return res.status(403).json({ error: "Accès non autorisé" });
   const rows = db
     .prepare(
-      "SELECT l.habit_id FROM logs l JOIN habits h ON h.id = l.habit_id WHERE l.date = ? AND h.user_id = ?"
+      "SELECT l.habit_id, l.status FROM logs l JOIN habits h ON h.id = l.habit_id WHERE l.date = ? AND h.user_id = ?"
     )
     .all(date, acc.ownerId);
-  let ids = rows.map((r) => r.habit_id);
-  if (acc.habitIds) ids = ids.filter((id) => acc.habitIds.has(id));
-  res.json(ids);
+  const out = {};
+  for (const r of rows) {
+    if (!acc.habitIds || acc.habitIds.has(r.habit_id)) out[r.habit_id] = r.status;
+  }
+  res.json(out);
 });
 
-// Toggle a habit completion for a date
+// Définit l'état d'une habitude pour un jour : 'done', 'missed' ou 'none'.
+app.post("/api/logs/set", requireAuth, (req, res) => {
+  const habitId = Number(req.body?.habit_id);
+  const date = req.body?.date;
+  const status = req.body?.status;
+  if (!habitId || !isValidDate(date))
+    return res.status(400).json({ error: "habit_id et date (YYYY-MM-DD) requis" });
+  if (!["done", "missed", "none"].includes(status))
+    return res.status(400).json({ error: "status doit être done, missed ou none" });
+
+  const habit = db
+    .prepare("SELECT id FROM habits WHERE id = ? AND user_id = ?")
+    .get(habitId, req.user.id);
+  if (!habit) return res.status(404).json({ error: "Habitude introuvable" });
+
+  if (status === "none") {
+    db.prepare("DELETE FROM logs WHERE habit_id = ? AND date = ?").run(habitId, date);
+  } else {
+    db.prepare(
+      `INSERT INTO logs (habit_id, date, status) VALUES (?, ?, ?)
+       ON CONFLICT(habit_id, date) DO UPDATE SET status = excluded.status`
+    ).run(habitId, date, status);
+  }
+  res.json({ habit_id: habitId, date, status });
+});
+
+// Bascule simple fait/rien (conservée pour compatibilité, ex. MCP).
 app.post("/api/logs/toggle", requireAuth, (req, res) => {
   const habitId = Number(req.body?.habit_id);
   const date = req.body?.date;
@@ -487,14 +596,17 @@ app.post("/api/logs/toggle", requireAuth, (req, res) => {
   if (!habit) return res.status(404).json({ error: "Habitude introuvable" });
 
   const existing = db
-    .prepare("SELECT id FROM logs WHERE habit_id = ? AND date = ?")
+    .prepare("SELECT id, status FROM logs WHERE habit_id = ? AND date = ?")
     .get(habitId, date);
 
-  if (existing) {
+  if (existing && existing.status === "done") {
     db.prepare("DELETE FROM logs WHERE id = ?").run(existing.id);
     res.json({ habit_id: habitId, date, done: false });
   } else {
-    db.prepare("INSERT INTO logs (habit_id, date) VALUES (?, ?)").run(habitId, date);
+    db.prepare(
+      `INSERT INTO logs (habit_id, date, status) VALUES (?, ?, 'done')
+       ON CONFLICT(habit_id, date) DO UPDATE SET status = 'done'`
+    ).run(habitId, date);
     res.json({ habit_id: habitId, date, done: true });
   }
 });
@@ -569,7 +681,7 @@ app.get("/api/summary", requireAuth, (req, res) => {
 
   let logRows = db
     .prepare(
-      "SELECT l.habit_id, l.date FROM logs l JOIN habits h ON h.id = l.habit_id WHERE h.user_id = ? AND l.date LIKE ? ORDER BY l.date"
+      "SELECT l.habit_id, l.date FROM logs l JOIN habits h ON h.id = l.habit_id WHERE h.user_id = ? AND l.status = 'done' AND l.date LIKE ? ORDER BY l.date"
     )
     .all(acc.ownerId, prefix);
   if (acc.habitIds) logRows = logRows.filter((r) => acc.habitIds.has(r.habit_id));
@@ -630,7 +742,7 @@ app.get("/api/trends", requireAuth, (req, res) => {
   // non partagées sont donc ignorés.
   const rows = db
     .prepare(
-      "SELECT l.habit_id, l.date FROM logs l JOIN habits h ON h.id = l.habit_id WHERE h.user_id = ? AND l.date LIKE ?"
+      "SELECT l.habit_id, l.date FROM logs l JOIN habits h ON h.id = l.habit_id WHERE h.user_id = ? AND l.status = 'done' AND l.date LIKE ?"
     )
     .all(acc.ownerId, `${year}-%`);
 
@@ -691,8 +803,10 @@ app.get("/api/habits/:id/calendar", requireAuth, (req, res) => {
   if (!habit) return res.status(404).json({ error: "Habitude introuvable" });
 
   const rows = db
-    .prepare("SELECT date FROM logs WHERE habit_id = ? AND date LIKE ? ORDER BY date")
+    .prepare("SELECT date, status FROM logs WHERE habit_id = ? AND date LIKE ? ORDER BY date")
     .all(id, `${month}-%`);
+  const statuses = {}; // { date: 'done' | 'missed' }
+  for (const r of rows) statuses[r.date] = r.status;
 
   const noteRows = db
     .prepare("SELECT date, text FROM notes WHERE habit_id = ? AND date LIKE ?")
@@ -705,7 +819,8 @@ app.get("/api/habits/:id/calendar", requireAuth, (req, res) => {
     days: habit.days,
     start_date: habit.start_date,
     end_date: habit.end_date,
-    dates: rows.map((r) => r.date),
+    dates: rows.filter((r) => r.status === "done").map((r) => r.date),
+    statuses,
     notes,
   });
 });
