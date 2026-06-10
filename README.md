@@ -85,6 +85,47 @@ utilisateurs). Elle permet de : lister les utilisateurs et leur nombre
 d'habitudes, modifier leur email, **définir un nouveau mot de passe**, supprimer
 un compte, et **activer/désactiver les inscriptions**.
 
+## Serveur MCP (pilotage en langage naturel)
+
+Le fichier `mcp-server.js` expose l'application comme **serveur MCP** (Model
+Context Protocol). Connecté à Claude (Desktop, Code…), il permet de demander en
+langage naturel : « combien d'habitudes je suis ? », « ajoute une habitude
+Lecture le week-end », « coche Sport pour hier », « mes stats de mai »…
+
+**Outils disponibles** : `list_habits`, `add_habit`, `mark_habit`,
+`day_status`, `monthly_summary`, `yearly_stats`, `add_note`.
+
+Il s'authentifie auprès de l'API avec un compte utilisateur normal :
+
+| Variable          | Description                                    |
+| ----------------- | ---------------------------------------------- |
+| `HABITS_URL`      | URL de l'app (défaut `http://localhost:3000`)  |
+| `HABITS_EMAIL`    | Email du compte                                |
+| `HABITS_PASSWORD` | Mot de passe du compte                         |
+
+Exemple de configuration (Claude Desktop `claude_desktop_config.json`, ou
+`.mcp.json` pour Claude Code) :
+
+```json
+{
+  "mcpServers": {
+    "habits": {
+      "command": "node",
+      "args": ["/chemin/vers/habitsCounting/mcp-server.js"],
+      "env": {
+        "HABITS_URL": "https://habits.exemple.com",
+        "HABITS_EMAIL": "toi@exemple.com",
+        "HABITS_PASSWORD": "ton-mot-de-passe"
+      }
+    }
+  }
+}
+```
+
+> Le serveur MCP tourne sur **ta machine** (transport stdio) et parle à l'app
+> via HTTP — il fonctionne donc aussi bien avec une instance locale qu'avec le
+> VPS en HTTPS. Il faut `npm install` dans le dossier pour ses dépendances.
+
 ## API
 
 Toutes les routes `/api` (hors authentification) requièrent une session valide
