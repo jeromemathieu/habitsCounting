@@ -205,6 +205,19 @@
           </form>
           <p id="pw-msg" class="share-msg hidden"></p>
         </div>
+        <div class="share-section">
+          <h2 class="share-title">Calendrier (Google Agenda, Apple…)</h2>
+          <p class="share-help">Abonne ton agenda à cette URL pour y voir tes habitudes (✓ fait / ✗ pas fait) en lecture seule. Dans Google Agenda : « Autres agendas » → « À partir d'une URL ».</p>
+          <div class="ical-row">
+            <input type="text" id="ical-url" readonly placeholder="…" />
+            <button type="button" id="ical-copy">Copier</button>
+          </div>
+          <p class="share-help" style="margin-top:0.6rem">
+            <button type="button" id="ical-regen" class="link-btn">Régénérer l'URL</button>
+            (l'ancienne cessera de fonctionner)
+          </p>
+          <p id="ical-msg" class="share-msg hidden"></p>
+        </div>
       </section>
     </main>
 

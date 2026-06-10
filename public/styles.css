@@ -304,6 +304,41 @@ main {
   color: var(--muted);
   text-decoration: line-through;
 }
+.habit-item.missed { border-color: transparent; }
+.habit-item.missed .name { color: var(--muted); }
+
+/* Boutons d'état du panneau calendrier (Fait / Pas fait / Rien) */
+.panel-status { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.panel-btn {
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  padding: 0.35rem 0.7rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+/* Section iCal (Mon compte) */
+.ical-row { display: flex; gap: 0.5rem; }
+.ical-row input {
+  flex: 1;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  background: var(--bg);
+  color: var(--text);
+}
+.ical-row button {
+  padding: 0 1rem;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
 
 /* Month summary */
 .month-stats {

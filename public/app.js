@@ -129,26 +129,30 @@ async function renderDay() {
   $("#day-picker").value = currentDate;
   $("#day-label").textContent = frDate(currentDate);
 
-  const [habits, doneIds, notes] = await Promise.all([
+  const [habits, statuses, notes] = await Promise.all([
     api("/api/habits"),
-    api("/api/logs?date=" + currentDate),
+    api("/api/logs?date=" + currentDate), // { id: 'done' | 'missed' }
     api("/api/notes?date=" + currentDate),
   ]);
-  const doneSet = new Set(doneIds);
 
   const list = $("#day-list");
   list.innerHTML = "";
   $("#day-empty").classList.toggle("hidden", habits.length > 0);
 
+  // Cycle des états : rien -> fait -> pas fait -> rien
+  const NEXT = { none: "done", done: "missed", missed: "none" };
+  const MISSED = "#dc2626";
+
   for (const h of habits) {
-    const done = doneSet.has(h.id);
+    const status = statuses[h.id] || "none";
     const note = notes[h.id] || "";
 
     const li = document.createElement("li");
-    li.className = "habit-item" + (done ? " done" : "");
-    li.style.background = done ? h.color + "1a" : "";
+    li.className = "habit-item" + (status === "done" ? " done" : status === "missed" ? " missed" : "");
+    li.style.background =
+      status === "done" ? h.color + "1a" : status === "missed" ? MISSED + "14" : "";
 
-    // Ligne principale (clic = cocher/décocher)
+    // Ligne principale (clic = change d'état)
     const main = document.createElement("div");
     main.className = "habit-main";
     main.innerHTML = `
@@ -161,11 +165,16 @@ async function renderDay() {
     noteBtn.title = note ? "Modifier le commentaire" : "Ajouter un commentaire";
     const check = document.createElement("span");
     check.className = "checkbox";
-    if (done) {
+    if (status === "done") {
       check.style.background = h.color;
       check.style.borderColor = h.color;
       check.textContent = "✓";
+    } else if (status === "missed") {
+      check.style.background = MISSED;
+      check.style.borderColor = MISSED;
+      check.textContent = "✗";
     }
+    main.title = "Cliquer : " + { none: "marquer fait", done: "marquer pas fait", missed: "remettre à zéro" }[status];
     main.append(noteBtn, check);
 
     // Éditeur de note (déplié par le bouton 💬)
@@ -179,10 +188,10 @@ async function renderDay() {
     if (note) editor.classList.remove("hidden");
 
     main.addEventListener("click", async (e) => {
-      if (e.target === noteBtn) return; // le bouton note ne coche pas
-      await api("/api/logs/toggle", {
+      if (e.target === noteBtn) return; // le bouton note ne change pas l'état
+      await api("/api/logs/set", {
         method: "POST",
-        body: JSON.stringify({ habit_id: h.id, date: currentDate }),
+        body: JSON.stringify({ habit_id: h.id, date: currentDate, status: NEXT[status] }),
       });
       renderDay();
     });
@@ -259,8 +268,9 @@ async function drawCalendar() {
 
   const data = await api(`/api/habits/${calHabitId}/calendar?month=${calMonth}`);
   calData = data;
-  const done = new Set(data.dates);
+  const statuses = data.statuses || {};
   const notes = data.notes || {};
+  const MISSED = "#dc2626";
   const mask = data.days;
   const start = data.start_date;
   const end = data.end_date;
@@ -295,7 +305,8 @@ async function drawCalendar() {
   for (let d = 1; d <= daysInMonth; d++) {
     const iso = `${calMonth}-${String(d).padStart(2, "0")}`;
     const dow = new Date(y, m - 1, d).getDay();
-    const isDone = done.has(iso);
+    const status = statuses[iso] || "none"; // 'done' | 'missed' | 'none'
+    const isDone = status === "done";
     const outRange = (start && iso < start) || (end && iso > end);
     const scheduled = mask[dow] === "1" && !outRange;
     if (scheduled) scheduledCount++;
@@ -313,6 +324,9 @@ async function drawCalendar() {
     if (isDone) {
       cell.classList.add("done");
       cell.style.background = color;
+    } else if (status === "missed") {
+      cell.classList.add("missed");
+      cell.style.background = MISSED;
     }
 
     const num = document.createElement("span");
@@ -320,7 +334,7 @@ async function drawCalendar() {
     num.textContent = d;
     const dot = document.createElement("span");
     dot.className = "cal-dot";
-    if (scheduled && !isDone) dot.style.background = color; // point « jour prévu »
+    if (scheduled && status === "none") dot.style.background = color; // point « jour prévu »
     cell.append(num, dot);
 
     if (outRange) {
@@ -369,29 +383,40 @@ function renderCalPanel() {
     return;
   }
   const iso = calSelectedDate;
-  const done = new Set(calData.dates).has(iso);
+  const status = (calData.statuses || {})[iso] || "none";
   const note = (calData.notes || {})[iso] || "";
   const color = getHabitColor();
+  const MISSED = "#dc2626";
+
+  const styleFor = (s) =>
+    s === "done"
+      ? `background:${color};border-color:${color};color:#fff`
+      : s === "missed"
+      ? `background:${MISSED};border-color:${MISSED};color:#fff`
+      : "";
 
   panel.classList.remove("hidden");
   panel.innerHTML = `
     <div class="panel-head">
       <span class="panel-date">${frDate(iso)}</span>
-      <button class="panel-toggle ${done ? "done" : ""}" id="panel-toggle"
-        style="${done ? `background:${color};border-color:${color}` : ""}">
-        ${done ? "✓ Fait" : "Marquer comme fait"}
-      </button>
+      <div class="panel-status">
+        <button class="panel-btn" data-status="done" style="${status === "done" ? styleFor("done") : ""}">✓ Fait</button>
+        <button class="panel-btn" data-status="missed" style="${status === "missed" ? styleFor("missed") : ""}">✗ Pas fait</button>
+        <button class="panel-btn" data-status="none" style="${status === "none" ? "background:var(--border)" : ""}">Rien</button>
+      </div>
     </div>
     <textarea id="panel-note" class="panel-note" rows="3"
       placeholder="Ajouter un commentaire pour ce jour…">${escapeHtml(note)}</textarea>
   `;
 
-  $("#panel-toggle").addEventListener("click", async () => {
-    await api("/api/logs/toggle", {
-      method: "POST",
-      body: JSON.stringify({ habit_id: calHabitId, date: iso }),
+  panel.querySelectorAll(".panel-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      await api("/api/logs/set", {
+        method: "POST",
+        body: JSON.stringify({ habit_id: calHabitId, date: iso, status: btn.dataset.status }),
+      });
+      await drawCalendar(); // met à jour case, stats et panneau (sélection conservée)
     });
-    await drawCalendar(); // met à jour case, stats et panneau (sélection conservée)
   });
 
   const ta = $("#panel-note");
@@ -729,12 +754,12 @@ async function loadSharedOwner() {
 async function drawShared() {
   const today = toISODate(new Date());
   const month = today.slice(0, 7);
-  const [summary, doneIds] = await Promise.all([
+  const [summary, statuses] = await Promise.all([
     api(`/api/summary?owner=${sharedOwnerId}&month=${month}`),
     api(`/api/logs?date=${today}&owner=${sharedOwnerId}`),
   ]);
-  const doneSet = new Set(doneIds);
   const wrap = $("#shared-content");
+  const MISSED = "#dc2626";
 
   if (!summary.habits.length) {
     wrap.innerHTML = '<p class="empty">Cette personne n\'a pas encore d\'habitude.</p>';
@@ -744,12 +769,20 @@ async function drawShared() {
   let html = `<p class="shared-sub">Aujourd'hui — ${frDate(today)}</p>`;
   html += '<ul class="habit-checklist">';
   for (const h of summary.habits) {
-    const done = doneSet.has(h.id);
-    html += `<li class="habit-item ${done ? "done" : ""}" style="${done ? `background:${h.color}1a` : ""}">
+    const st = statuses[h.id] || "none";
+    const bg = st === "done" ? `${h.color}1a` : st === "missed" ? `${MISSED}14` : "";
+    const box =
+      st === "done"
+        ? `background:${h.color};border-color:${h.color}`
+        : st === "missed"
+        ? `background:${MISSED};border-color:${MISSED}`
+        : "";
+    const mark = st === "done" ? "✓" : st === "missed" ? "✗" : "";
+    html += `<li class="habit-item ${st === "done" ? "done" : st === "missed" ? "missed" : ""}" style="background:${bg}">
       <div class="habit-main" style="cursor:default">
         <span class="dot" style="background:${h.color}"></span>
         <span class="name">${escapeHtml(h.name)}</span>
-        <span class="checkbox" style="${done ? `background:${h.color};border-color:${h.color}` : ""}">${done ? "✓" : ""}</span>
+        <span class="checkbox" style="${box}">${mark}</span>
       </div></li>`;
   }
   html += "</ul>";
@@ -811,13 +844,14 @@ async function drawSharedCalendar() {
   const data = await api(
     `/api/habits/${sharedCalHabitId}/calendar?month=${sharedCalMonth}&owner=${sharedOwnerId}`
   );
-  const done = new Set(data.dates);
+  const statuses = data.statuses || {};
   const notes = data.notes || {};
   const mask = data.days;
   const start = data.start_date;
   const end = data.end_date;
   const today = toISODate(new Date());
   const color = (sharedCalHabits.find((h) => h.id === sharedCalHabitId) || {}).color || "#4f46e5";
+  const MISSED = "#dc2626";
 
   const head = $("#shared-cal-weekdays");
   head.innerHTML = "";
@@ -843,7 +877,8 @@ async function drawSharedCalendar() {
   for (let d = 1; d <= daysInMonth; d++) {
     const iso = `${sharedCalMonth}-${String(d).padStart(2, "0")}`;
     const dow = new Date(y, m - 1, d).getDay();
-    const isDone = done.has(iso);
+    const status = statuses[iso] || "none";
+    const isDone = status === "done";
     const outRange = (start && iso < start) || (end && iso > end);
     const scheduled = mask[dow] === "1" && !outRange;
     if (scheduled) sc++;
@@ -859,13 +894,16 @@ async function drawSharedCalendar() {
     if (isDone) {
       cell.classList.add("done");
       cell.style.background = color;
+    } else if (status === "missed") {
+      cell.classList.add("missed");
+      cell.style.background = MISSED;
     }
     const num = document.createElement("span");
     num.className = "cal-num";
     num.textContent = d;
     const dot = document.createElement("span");
     dot.className = "cal-dot";
-    if (scheduled && !isDone) dot.style.background = color;
+    if (scheduled && status === "none") dot.style.background = color;
     cell.append(num, dot);
 
     if (notes[iso]) {
@@ -1254,9 +1292,33 @@ function enterApp(user) {
 }
 
 // --- Vue Mon compte ---
-function renderAccount() {
+async function renderAccount() {
   $("#account-email").textContent = currentUserEmail;
+  const { url } = await api("/api/calendar-url");
+  $("#ical-url").value = url;
 }
+
+$("#ical-copy").addEventListener("click", async () => {
+  const input = $("#ical-url");
+  const msg = $("#ical-msg");
+  try {
+    await navigator.clipboard.writeText(input.value);
+  } catch {
+    input.select(); // repli si le presse-papiers est indisponible
+    document.execCommand("copy");
+  }
+  msg.textContent = "URL copiée ✓";
+  msg.className = "share-msg ok";
+});
+
+$("#ical-regen").addEventListener("click", async () => {
+  if (!confirm("Régénérer l'URL ? L'ancienne cessera de fonctionner.")) return;
+  const { url } = await api("/api/calendar-url/regenerate", { method: "POST" });
+  $("#ical-url").value = url;
+  const msg = $("#ical-msg");
+  msg.textContent = "Nouvelle URL générée. Mets à jour ton agenda.";
+  msg.className = "share-msg ok";
+});
 
 // --- Init : vérifie la session puis affiche l'app ou l'écran de connexion ---
 (async function init() {

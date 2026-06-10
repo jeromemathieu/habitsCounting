@@ -14,7 +14,10 @@ Application web pour **noter chaque jour les actions réalisées** et obtenir un
   calendrier et synthèse). Les écritures restent limitées à ses propres données.
 - **Mon compte** : onglet dédié pour voir son email et changer son mot de passe.
 - **Mes habitudes** : créer, renommer, recolorer et supprimer tes habitudes.
-- **Jour** : cocher d'un clic les habitudes réalisées, naviguer entre les jours.
+- **Jour** : 3 états par habitude — **fait** ✓, **pas fait** ✗ ou **rien** —
+  d'un clic (cycle), avec un code couleur distinct ; navigation entre les jours.
+- **Abonnement calendrier (iCal)** : une URL secrète à ajouter dans Google
+  Agenda / Apple Calendrier pour voir ses habitudes (✓/✗) en lecture seule.
 - **Récap mensuel** : nombre d'actions cochées, régularité moyenne, et une barre
   de progression par habitude (X jours sur le mois + pourcentage).
 - **Jours prévus** : pour chaque habitude, choix des jours de la semaine où
@@ -142,8 +145,12 @@ Toutes les routes `/api` (hors authentification) requièrent une session valide
 | `POST`   | `/api/habits`              | Créer une habitude `{name, color, days, start_date, end_date}` |
 | `PUT`    | `/api/habits/:id`          | Modifier une habitude                         |
 | `DELETE` | `/api/habits/:id`          | Supprimer une habitude (et son historique)    |
-| `GET`    | `/api/logs?date=YYYY-MM-DD`| Ids des habitudes cochées ce jour-là          |
-| `POST`   | `/api/logs/toggle`         | Basculer `{habit_id, date}`                   |
+| `GET`    | `/api/logs?date=YYYY-MM-DD`| Statuts du jour `{habit_id: 'done'\|'missed'}` |
+| `POST`   | `/api/logs/set`            | Définir `{habit_id, date, status}` (done/missed/none) |
+| `POST`   | `/api/logs/toggle`         | Basculer fait/rien `{habit_id, date}`         |
+| `GET`    | `/api/calendar-url`        | URL d'abonnement iCal de l'utilisateur        |
+| `POST`   | `/api/calendar-url/regenerate` | Régénère le jeton iCal                    |
+| `GET`    | `/calendar/:token.ics`     | Flux iCalendar public (par jeton)             |
 | `GET`    | `/api/notes?date=YYYY-MM-DD`| Commentaires des habitudes pour ce jour      |
 | `PUT`    | `/api/notes`               | Enregistrer/supprimer `{habit_id, date, text}` |
 | `GET`    | `/api/summary?month=YYYY-MM`| Récapitulatif mensuel                        |
@@ -172,7 +179,7 @@ Toutes les routes `/api` (hors authentification) requièrent une session valide
   (`days` = masque de 7 caractères '1'/'0', indexé par `getDay()` :
   0 = dimanche … 6 = samedi ; `start_date`/`end_date` optionnelles, bornent
   le calcul du taux)
-- `logs` : id, habit_id, date — une ligne = habitude cochée ce jour
+- `logs` : id, habit_id, date, status (`done`/`missed` ; absence = rien)
   (contrainte d'unicité sur `(habit_id, date)`)
 - `notes` : id, habit_id, date, text — un commentaire par habitude et par jour
   (contrainte d'unicité sur `(habit_id, date)`)
