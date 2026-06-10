@@ -45,17 +45,26 @@ function requireAuth(req, res, next) {
   next();
 }
 
-// Détermine l'utilisateur dont on lit les données.
-// Sans `?owner=`, c'est soi-même. Avec `?owner=<id>`, c'est ce propriétaire
-// uniquement s'il a partagé ses habitudes avec l'utilisateur courant (lecture).
-// Renvoie l'id, ou null si l'accès n'est pas autorisé.
-function effectiveOwner(req) {
+// Détermine de quelles données on autorise la lecture.
+// Sans `?owner=`, c'est soi-même (toutes ses habitudes).
+// Avec `?owner=<id>`, selon les partages reçus :
+//   - un partage « toutes » (habit_id NULL) -> habitIds = null (toutes)
+//   - sinon -> habitIds = Set des habitudes partagées
+// Renvoie { ownerId, habitIds } ou null si aucun accès.
+function resolveAccess(req) {
   const owner = req.query.owner ? Number(req.query.owner) : null;
-  if (!owner || owner === req.user.id) return req.user.id;
-  const share = db
-    .prepare("SELECT 1 FROM shares WHERE owner_id = ? AND viewer_id = ?")
-    .get(owner, req.user.id);
-  return share ? owner : null;
+  if (!owner || owner === req.user.id) return { ownerId: req.user.id, habitIds: null };
+  const rows = db
+    .prepare("SELECT habit_id FROM shares WHERE owner_id = ? AND viewer_id = ?")
+    .all(owner, req.user.id);
+  if (!rows.length) return null;
+  if (rows.some((r) => r.habit_id === null)) return { ownerId: owner, habitIds: null };
+  return { ownerId: owner, habitIds: new Set(rows.map((r) => r.habit_id)) };
+}
+
+// Filtre une liste d'habitudes selon les ids autorisés (null = toutes).
+function filterHabits(habits, habitIds) {
+  return habitIds ? habits.filter((h) => habitIds.has(h.id)) : habits;
 }
 
 // --- Authentification ---
@@ -239,18 +248,21 @@ app.put("/api/admin/settings", requireAdmin, (req, res) => {
 
 // --- Partage (lecture seule) ---
 
-// Personnes avec qui JE partage mes habitudes (sortant).
+// Personnes avec qui JE partage (sortant), avec l'habitude concernée (ou toutes).
 app.get("/api/shares", requireAuth, (req, res) => {
   const rows = db
     .prepare(
-      `SELECT s.id, u.email FROM shares s JOIN users u ON u.id = s.viewer_id
-       WHERE s.owner_id = ? ORDER BY u.email`
+      `SELECT s.id, u.email, s.habit_id, h.name AS habit_name
+       FROM shares s
+       JOIN users u ON u.id = s.viewer_id
+       LEFT JOIN habits h ON h.id = s.habit_id
+       WHERE s.owner_id = ? ORDER BY u.email, h.name`
     )
     .all(req.user.id);
   res.json(rows);
 });
 
-// Partager mes habitudes avec l'utilisateur ayant cet email.
+// Partager avec un utilisateur : toutes les habitudes, ou une seule via habit_id.
 app.post("/api/shares", requireAuth, (req, res) => {
   const email = String(req.body?.email || "").trim().toLowerCase();
   if (!isValidEmail(email)) return res.status(400).json({ error: "Email invalide" });
@@ -260,15 +272,31 @@ app.post("/api/shares", requireAuth, (req, res) => {
   if (viewer.id === req.user.id)
     return res.status(400).json({ error: "Vous ne pouvez pas vous partager à vous-même" });
 
-  const exists = db
-    .prepare("SELECT id FROM shares WHERE owner_id = ? AND viewer_id = ?")
-    .get(req.user.id, viewer.id);
-  if (exists) return res.status(409).json({ error: "Déjà partagé avec cette personne" });
+  // Habitude ciblée (optionnelle). Doit appartenir au propriétaire.
+  let habitId = null;
+  let habitName = null;
+  if (req.body?.habit_id !== undefined && req.body.habit_id !== null && req.body.habit_id !== "") {
+    habitId = Number(req.body.habit_id);
+    const habit = db
+      .prepare("SELECT id, name FROM habits WHERE id = ? AND user_id = ?")
+      .get(habitId, req.user.id);
+    if (!habit) return res.status(404).json({ error: "Habitude introuvable" });
+    habitName = habit.name;
+  }
+
+  const dup = db
+    .prepare(
+      habitId === null
+        ? "SELECT id FROM shares WHERE owner_id = ? AND viewer_id = ? AND habit_id IS NULL"
+        : "SELECT id FROM shares WHERE owner_id = ? AND viewer_id = ? AND habit_id = ?"
+    )
+    .get(...(habitId === null ? [req.user.id, viewer.id] : [req.user.id, viewer.id, habitId]));
+  if (dup) return res.status(409).json({ error: "Ce partage existe déjà" });
 
   const info = db
-    .prepare("INSERT INTO shares (owner_id, viewer_id) VALUES (?, ?)")
-    .run(req.user.id, viewer.id);
-  res.status(201).json({ id: info.lastInsertRowid, email: viewer.email });
+    .prepare("INSERT INTO shares (owner_id, viewer_id, habit_id) VALUES (?, ?, ?)")
+    .run(req.user.id, viewer.id, habitId);
+  res.status(201).json({ id: info.lastInsertRowid, email: viewer.email, habit_id: habitId, habit_name: habitName });
 });
 
 // Révoquer un partage que j'ai créé.
@@ -280,11 +308,11 @@ app.delete("/api/shares/:id", requireAuth, (req, res) => {
   res.status(204).end();
 });
 
-// Personnes qui ont partagé AVEC moi (entrant) — pour l'onglet « Partagé ».
+// Personnes qui ont partagé AVEC moi (entrant) — propriétaires distincts.
 app.get("/api/shared", requireAuth, (req, res) => {
   const rows = db
     .prepare(
-      `SELECT u.id, u.email FROM shares s JOIN users u ON u.id = s.owner_id
+      `SELECT DISTINCT u.id, u.email FROM shares s JOIN users u ON u.id = s.owner_id
        WHERE s.viewer_id = ? ORDER BY u.email`
     )
     .all(req.user.id);
@@ -343,12 +371,12 @@ function scheduledDaysInMonth(year, mon, mask, start = null, end = null) {
 
 // List active habits (ordered). `?owner=` pour consulter un partage.
 app.get("/api/habits", requireAuth, (req, res) => {
-  const ownerId = effectiveOwner(req);
-  if (ownerId === null) return res.status(403).json({ error: "Accès non autorisé" });
+  const acc = resolveAccess(req);
+  if (!acc) return res.status(403).json({ error: "Accès non autorisé" });
   const habits = db
     .prepare("SELECT * FROM habits WHERE archived = 0 AND user_id = ? ORDER BY sort_order, id")
-    .all(ownerId);
-  res.json(habits);
+    .all(acc.ownerId);
+  res.json(filterHabits(habits, acc.habitIds));
 });
 
 // Create a habit
@@ -434,14 +462,16 @@ app.delete("/api/habits/:id", requireAuth, (req, res) => {
 app.get("/api/logs", requireAuth, (req, res) => {
   const date = req.query.date;
   if (!isValidDate(date)) return res.status(400).json({ error: "Date invalide (YYYY-MM-DD)" });
-  const ownerId = effectiveOwner(req);
-  if (ownerId === null) return res.status(403).json({ error: "Accès non autorisé" });
+  const acc = resolveAccess(req);
+  if (!acc) return res.status(403).json({ error: "Accès non autorisé" });
   const rows = db
     .prepare(
       "SELECT l.habit_id FROM logs l JOIN habits h ON h.id = l.habit_id WHERE l.date = ? AND h.user_id = ?"
     )
-    .all(date, ownerId);
-  res.json(rows.map((r) => r.habit_id));
+    .all(date, acc.ownerId);
+  let ids = rows.map((r) => r.habit_id);
+  if (acc.habitIds) ids = ids.filter((id) => acc.habitIds.has(id));
+  res.json(ids);
 });
 
 // Toggle a habit completion for a date
@@ -475,15 +505,17 @@ app.post("/api/logs/toggle", requireAuth, (req, res) => {
 app.get("/api/notes", requireAuth, (req, res) => {
   const date = req.query.date;
   if (!isValidDate(date)) return res.status(400).json({ error: "Date invalide (YYYY-MM-DD)" });
-  const ownerId = effectiveOwner(req);
-  if (ownerId === null) return res.status(403).json({ error: "Accès non autorisé" });
+  const acc = resolveAccess(req);
+  if (!acc) return res.status(403).json({ error: "Accès non autorisé" });
   const rows = db
     .prepare(
       "SELECT n.habit_id, n.text FROM notes n JOIN habits h ON h.id = n.habit_id WHERE n.date = ? AND h.user_id = ?"
     )
-    .all(date, ownerId);
+    .all(date, acc.ownerId);
   const out = {};
-  for (const r of rows) out[r.habit_id] = r.text;
+  for (const r of rows) {
+    if (!acc.habitIds || acc.habitIds.has(r.habit_id)) out[r.habit_id] = r.text;
+  }
   res.json(out);
 });
 
@@ -521,22 +553,26 @@ app.get("/api/summary", requireAuth, (req, res) => {
   const month = req.query.month;
   if (!isValidMonth(month)) return res.status(400).json({ error: "Mois invalide (YYYY-MM)" });
 
-  const ownerId = effectiveOwner(req);
-  if (ownerId === null) return res.status(403).json({ error: "Accès non autorisé" });
+  const acc = resolveAccess(req);
+  if (!acc) return res.status(403).json({ error: "Accès non autorisé" });
 
   const [year, mon] = month.split("-").map(Number);
   const daysInMonth = new Date(year, mon, 0).getDate();
   const prefix = `${month}-%`;
 
-  const habits = db
-    .prepare("SELECT * FROM habits WHERE archived = 0 AND user_id = ? ORDER BY sort_order, id")
-    .all(ownerId);
+  const habits = filterHabits(
+    db
+      .prepare("SELECT * FROM habits WHERE archived = 0 AND user_id = ? ORDER BY sort_order, id")
+      .all(acc.ownerId),
+    acc.habitIds
+  );
 
-  const logRows = db
+  let logRows = db
     .prepare(
       "SELECT l.habit_id, l.date FROM logs l JOIN habits h ON h.id = l.habit_id WHERE h.user_id = ? AND l.date LIKE ? ORDER BY l.date"
     )
-    .all(ownerId, prefix);
+    .all(acc.ownerId, prefix);
+  if (acc.habitIds) logRows = logRows.filter((r) => acc.habitIds.has(r.habit_id));
 
   const byHabit = new Map();
   for (const row of logRows) {
@@ -580,18 +616,23 @@ app.get("/api/trends", requireAuth, (req, res) => {
   if (typeof year !== "string" || !/^\d{4}$/.test(year))
     return res.status(400).json({ error: "Année invalide (YYYY)" });
 
-  const ownerId = effectiveOwner(req);
-  if (ownerId === null) return res.status(403).json({ error: "Accès non autorisé" });
+  const acc = resolveAccess(req);
+  if (!acc) return res.status(403).json({ error: "Accès non autorisé" });
 
-  const habits = db
-    .prepare("SELECT * FROM habits WHERE archived = 0 AND user_id = ? ORDER BY sort_order, id")
-    .all(ownerId);
+  const habits = filterHabits(
+    db
+      .prepare("SELECT * FROM habits WHERE archived = 0 AND user_id = ? ORDER BY sort_order, id")
+      .all(acc.ownerId),
+    acc.habitIds
+  );
 
+  // habitMap est construit sur les habitudes filtrées : les logs des habitudes
+  // non partagées sont donc ignorés.
   const rows = db
     .prepare(
       "SELECT l.habit_id, l.date FROM logs l JOIN habits h ON h.id = l.habit_id WHERE h.user_id = ? AND l.date LIKE ?"
     )
-    .all(ownerId, `${year}-%`);
+    .all(acc.ownerId, `${year}-%`);
 
   const habitMap = new Map(habits.map((h) => [h.id, h]));
   const monthly = new Map(); // habit_id -> [12] complétions brutes
@@ -640,11 +681,13 @@ app.get("/api/habits/:id/calendar", requireAuth, (req, res) => {
   const month = req.query.month;
   if (!isValidMonth(month)) return res.status(400).json({ error: "Mois invalide (YYYY-MM)" });
 
-  const ownerId = effectiveOwner(req);
-  if (ownerId === null) return res.status(403).json({ error: "Accès non autorisé" });
+  const acc = resolveAccess(req);
+  if (!acc) return res.status(403).json({ error: "Accès non autorisé" });
+  if (acc.habitIds && !acc.habitIds.has(id))
+    return res.status(404).json({ error: "Habitude introuvable" });
   const habit = db
     .prepare("SELECT * FROM habits WHERE id = ? AND user_id = ?")
-    .get(id, ownerId);
+    .get(id, acc.ownerId);
   if (!habit) return res.status(404).json({ error: "Habitude introuvable" });
 
   const rows = db

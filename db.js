@@ -60,10 +60,12 @@ db.exec(`
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     owner_id   INTEGER NOT NULL,
     viewer_id  INTEGER NOT NULL,
+    habit_id   INTEGER,                       -- NULL = toutes les habitudes
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (owner_id)  REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (viewer_id) REFERENCES users(id) ON DELETE CASCADE,
-    UNIQUE (owner_id, viewer_id)
+    FOREIGN KEY (habit_id)  REFERENCES habits(id) ON DELETE CASCADE,
+    UNIQUE (owner_id, viewer_id, habit_id)
   );
 
   CREATE INDEX IF NOT EXISTS idx_shares_viewer ON shares(viewer_id);
@@ -98,5 +100,31 @@ if (!habitCols.includes("user_id")) {
   db.exec("ALTER TABLE habits ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE");
 }
 db.exec("CREATE INDEX IF NOT EXISTS idx_habits_user ON habits(user_id)");
+
+// Partage par habitude : recrée l'ancienne table shares (UNIQUE(owner,viewer))
+// avec une colonne habit_id (NULL = toutes), en conservant les partages existants
+// comme partages « toutes les habitudes ».
+const shareCols = db.prepare("PRAGMA table_info(shares)").all().map((c) => c.name);
+if (!shareCols.includes("habit_id")) {
+  db.exec(`
+    CREATE TABLE shares_new (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_id   INTEGER NOT NULL,
+      viewer_id  INTEGER NOT NULL,
+      habit_id   INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (owner_id)  REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (viewer_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (habit_id)  REFERENCES habits(id) ON DELETE CASCADE,
+      UNIQUE (owner_id, viewer_id, habit_id)
+    );
+    INSERT INTO shares_new (id, owner_id, viewer_id, created_at)
+      SELECT id, owner_id, viewer_id, created_at FROM shares;
+    DROP TABLE shares;
+    ALTER TABLE shares_new RENAME TO shares;
+    CREATE INDEX IF NOT EXISTS idx_shares_viewer ON shares(viewer_id);
+    CREATE INDEX IF NOT EXISTS idx_shares_owner ON shares(owner_id);
+  `);
+}
 
 export default db;
