@@ -120,6 +120,7 @@ document.querySelectorAll(".tab").forEach((tab) => {
     if (view === "synthese") renderSynthese();
     if (view === "shared") renderShared();
     if (view === "manage") renderManage();
+    if (view === "account") renderAccount();
   });
 });
 
@@ -982,7 +983,8 @@ async function renderShares() {
     const li = document.createElement("li");
     li.className = "share-item";
     const span = document.createElement("span");
-    span.textContent = s.email;
+    const scope = s.habit_name ? s.habit_name : "Toutes les habitudes";
+    span.innerHTML = `${escapeHtml(s.email)} <span class="share-scope">— ${escapeHtml(scope)}</span>`;
     const del = document.createElement("button");
     del.className = "icon-btn danger";
     del.textContent = "✕";
@@ -1025,10 +1027,15 @@ $("#password-form").addEventListener("submit", async (e) => {
 $("#share-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const email = $("#share-email").value.trim();
+  const habitId = $("#share-habit").value; // "" = toutes
   const msg = $("#share-msg");
   try {
-    await api("/api/shares", { method: "POST", body: JSON.stringify({ email }) });
+    await api("/api/shares", {
+      method: "POST",
+      body: JSON.stringify({ email, habit_id: habitId || null }),
+    });
     $("#share-email").value = "";
+    $("#share-habit").value = "";
     msg.textContent = "Partagé ✓";
     msg.className = "share-msg ok";
     renderShares();
@@ -1045,6 +1052,16 @@ async function renderManage() {
   const list = $("#manage-list");
   list.innerHTML = "";
   $("#manage-empty").classList.toggle("hidden", habits.length > 0);
+
+  // Sélecteur d'habitude du partage (Toutes + une option par habitude).
+  const shareSel = $("#share-habit");
+  shareSel.innerHTML = '<option value="">Toutes les habitudes</option>';
+  for (const h of habits) {
+    const o = document.createElement("option");
+    o.value = h.id;
+    o.textContent = h.name;
+    shareSel.appendChild(o);
+  }
 
   for (const h of habits) {
     const li = document.createElement("li");
@@ -1228,10 +1245,17 @@ $("#logout-btn").addEventListener("click", async () => {
   location.reload();
 });
 
+let currentUserEmail = "";
 function enterApp(user) {
   document.body.classList.add("authed");
+  currentUserEmail = user.email;
   $("#user-email").textContent = user.email;
   renderDay();
+}
+
+// --- Vue Mon compte ---
+function renderAccount() {
+  $("#account-email").textContent = currentUserEmail;
 }
 
 // --- Init : vérifie la session puis affiche l'app ou l'écran de connexion ---

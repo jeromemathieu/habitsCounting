@@ -9,9 +9,10 @@ Application web pour **noter chaque jour les actions réalisées** et obtenir un
   passe ; chaque utilisateur ne voit que ses propres habitudes. Sessions par
   cookie httpOnly, mots de passe hachés (scrypt).
 - **Partage en lecture** : partager la consultation de ses habitudes avec un
-  autre utilisateur (par email) ; il les voit en lecture seule dans l'onglet
-  « Partagé » (statut du jour, récap mensuel, calendrier et synthèse). Les
-  écritures restent toujours limitées à ses propres données.
+  autre utilisateur (par email), **toutes ou une seule** ; il les voit en
+  lecture seule dans l'onglet « Partagé » (statut du jour, récap mensuel,
+  calendrier et synthèse). Les écritures restent limitées à ses propres données.
+- **Mon compte** : onglet dédié pour voir son email et changer son mot de passe.
 - **Mes habitudes** : créer, renommer, recolorer et supprimer tes habitudes.
 - **Jour** : cocher d'un clic les habitudes réalisées, naviguer entre les jours.
 - **Récap mensuel** : nombre d'actions cochées, régularité moyenne, et une barre
@@ -108,7 +109,7 @@ Toutes les routes `/api` (hors authentification) requièrent une session valide
 | `GET`    | `/api/trends?year=YYYY`    | Complétions par mois et par habitude (synthèse) |
 | `GET`    | `/api/habits/:id/calendar?month=YYYY-MM` | Dates réalisées + jours prévus, pour le calendrier |
 | `GET`    | `/api/shares`              | Personnes avec qui je partage (sortant)       |
-| `POST`   | `/api/shares`              | Partager avec `{email}`                       |
+| `POST`   | `/api/shares`              | Partager avec `{email, habit_id?}` (habit_id absent = toutes) |
 | `DELETE` | `/api/shares/:id`          | Révoquer un partage                           |
 | `GET`    | `/api/shared`              | Personnes qui partagent avec moi (entrant)    |
 | `POST`   | `/api/admin/login`         | Connexion admin `{email, password}`           |
@@ -134,8 +135,8 @@ Toutes les routes `/api` (hors authentification) requièrent une session valide
   (contrainte d'unicité sur `(habit_id, date)`)
 - `notes` : id, habit_id, date, text — un commentaire par habitude et par jour
   (contrainte d'unicité sur `(habit_id, date)`)
-- `shares` : id, owner_id, viewer_id — partage en lecture du propriétaire vers
-  le lecteur (contrainte d'unicité sur `(owner_id, viewer_id)`)
+- `shares` : id, owner_id, viewer_id, habit_id — partage en lecture
+  (`habit_id` NULL = toutes les habitudes ; unicité sur `(owner_id, viewer_id, habit_id)`)
 - `settings` : key, value — réglages applicatifs (ex. `allow_registration`)
 
 > **Migration** : au démarrage, les colonnes manquantes sont ajoutées
