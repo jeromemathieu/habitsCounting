@@ -139,6 +139,16 @@ async function renderDay() {
   list.innerHTML = "";
   $("#day-empty").classList.toggle("hidden", habits.length > 0);
 
+  // Progression du jour (x faites / total)
+  const doneCount = habits.filter((h) => statuses[h.id] === "done").length;
+  const prog = $("#day-progress");
+  prog.classList.toggle("hidden", habits.length === 0);
+  if (habits.length) {
+    const pct = Math.round((doneCount / habits.length) * 100);
+    $("#day-progress-fill").style.width = pct + "%";
+    $("#day-progress-text").innerHTML = `<b>${doneCount}</b> / ${habits.length} faites`;
+  }
+
   // Cycle des états : rien -> fait -> pas fait -> rien
   const NEXT = { none: "done", done: "missed", missed: "none" };
   const MISSED = "#dc2626";

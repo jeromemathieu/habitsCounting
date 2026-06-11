@@ -35,13 +35,13 @@
         </div>
       </div>
       <nav class="tabs">
-        <button class="tab active" data-view="day">Jour</button>
-        <button class="tab" data-view="calendar">Calendrier</button>
-        <button class="tab" data-view="month">Récap mensuel</button>
-        <button class="tab" data-view="synthese">Synthèse</button>
-        <button class="tab" data-view="shared">Partagé</button>
-        <button class="tab" data-view="manage">Mes habitudes</button>
-        <button class="tab" data-view="account">Mon compte</button>
+        <button class="tab active" data-view="day"><span class="tab-ico">☀️</span>Jour</button>
+        <button class="tab" data-view="calendar"><span class="tab-ico">📅</span>Calendrier</button>
+        <button class="tab" data-view="month"><span class="tab-ico">📊</span>Mois</button>
+        <button class="tab" data-view="synthese"><span class="tab-ico">📈</span>Synthèse</button>
+        <button class="tab" data-view="shared"><span class="tab-ico">👥</span>Partagé</button>
+        <button class="tab" data-view="manage"><span class="tab-ico">⚙️</span>Habitudes</button>
+        <button class="tab" data-view="account"><span class="tab-ico">👤</span>Compte</button>
       </nav>
     </header>
 
@@ -55,9 +55,13 @@
           <button id="today-btn" class="link-btn">Aujourd'hui</button>
         </div>
         <p class="day-label" id="day-label"></p>
+        <div id="day-progress" class="day-progress hidden">
+          <div class="day-progress-bar"><span id="day-progress-fill"></span></div>
+          <span id="day-progress-text" class="day-progress-text"></span>
+        </div>
         <ul id="day-list" class="habit-checklist"></ul>
         <p id="day-empty" class="empty hidden">
-          Aucune habitude pour l'instant. Ajoute-en dans l'onglet « Mes habitudes ».
+          🌱 Aucune habitude pour l'instant.<br />Ajoute-en dans l'onglet « Habitudes ».
         </p>
       </section>
 
@@ -77,7 +81,7 @@
           <div class="cal-legend" id="cal-legend"></div>
         </div>
         <p id="calendar-empty" class="empty hidden">
-          Aucune habitude. Ajoute-en dans l'onglet « Mes habitudes ».
+          📅 Aucune habitude.<br />Ajoute-en dans l'onglet « Habitudes ».
         </p>
       </section>
 
@@ -90,7 +94,7 @@
         </div>
         <div id="month-stats" class="month-stats"></div>
         <div id="month-summary"></div>
-        <p id="month-empty" class="empty hidden">Aucune habitude à récapituler.</p>
+        <p id="month-empty" class="empty hidden">📊 Rien à récapituler pour l’instant.</p>
       </section>
 
       <!-- Vue Synthèse -->
@@ -107,7 +111,7 @@
         </div>
         <div id="habit-filter" class="habit-filter"></div>
         <div id="chart-wrap" class="chart-wrap"></div>
-        <p id="synthese-empty" class="empty hidden">Aucune habitude à synthétiser.</p>
+        <p id="synthese-empty" class="empty hidden">📈 Rien à synthétiser pour l’instant.</p>
       </section>
 
       <!-- Vue Partagé (lecture seule) -->
@@ -151,7 +155,7 @@
         </div>
 
         <p id="shared-empty" class="empty hidden">
-          Personne ne partage ses habitudes avec toi pour l'instant.
+          👥 Personne ne partage ses habitudes avec toi pour l'instant.
         </p>
       </section>
 
@@ -171,7 +175,7 @@
           </div>
         </form>
         <ul id="manage-list" class="manage-list"></ul>
-        <p id="manage-empty" class="empty hidden">Aucune habitude. Ajoute ta première ci-dessus.</p>
+        <p id="manage-empty" class="empty hidden">✨ Aucune habitude. Ajoute ta première ci-dessus !</p>
 
         <div class="share-section">
           <h2 class="share-title">Partage en lecture</h2>
