@@ -199,7 +199,7 @@ app.get("/calendar/:token.ics", (req, res) => {
        FROM logs l
        JOIN habits h ON h.id = l.habit_id
        LEFT JOIN notes n ON n.habit_id = l.habit_id AND n.date = l.date
-       WHERE h.user_id = ? ORDER BY l.date, h.name`
+       WHERE h.user_id = ? AND l.status = 'done' ORDER BY l.date, h.name`
     )
     .all(user.id);
 
