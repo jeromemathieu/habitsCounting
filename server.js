@@ -78,6 +78,13 @@ function getSetting(key) {
 }
 const registrationAllowed = () => getSetting("allow_registration") !== "false";
 
+// Journalise une activité dans le flux d'un utilisateur.
+function logActivity(userId, { actor = "Vous", type, habitId = null, habitName = null, date = null, detail = null, read = 1 }) {
+  db.prepare(
+    "INSERT INTO activity (user_id, actor, type, habit_id, habit_name, date, detail, read) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run(userId, actor, type, habitId, habitName, date, detail, read ? 1 : 0);
+}
+
 // Middleware : réservé à une session admin valide.
 function requireAdmin(req, res, next) {
   const token = parseCookies(req)[ADMIN_COOKIE];
@@ -156,6 +163,23 @@ app.put("/api/auth/password", requireAuth, (req, res) => {
   db.prepare("UPDATE users SET password = ? WHERE id = ?").run(hashPassword(next), req.user.id);
   // Invalide les autres sessions (déconnexion des autres appareils).
   db.prepare("DELETE FROM sessions WHERE user_id = ? AND token <> ?").run(req.user.id, req.sessionToken);
+  res.json({ ok: true });
+});
+
+// --- Journal d'activité ---
+
+app.get("/api/activity", requireAuth, (req, res) => {
+  const items = db
+    .prepare("SELECT * FROM activity WHERE user_id = ? ORDER BY id DESC LIMIT 100")
+    .all(req.user.id);
+  const unread = db
+    .prepare("SELECT COUNT(*) AS c FROM activity WHERE user_id = ? AND read = 0")
+    .get(req.user.id).c;
+  res.json({ unread, items });
+});
+
+app.post("/api/activity/read", requireAuth, (req, res) => {
+  db.prepare("UPDATE activity SET read = 1 WHERE user_id = ? AND read = 0").run(req.user.id);
   res.json({ ok: true });
 });
 
@@ -376,6 +400,11 @@ app.post("/api/shares", requireAuth, (req, res) => {
   const info = db
     .prepare("INSERT INTO shares (owner_id, viewer_id, habit_id) VALUES (?, ?, ?)")
     .run(req.user.id, viewer.id, habitId);
+  logActivity(req.user.id, {
+    type: "share_added",
+    habitName,
+    detail: `Partage avec ${viewer.email} (${habitName || "toutes les habitudes"})`,
+  });
   res.status(201).json({ id: info.lastInsertRowid, email: viewer.email, habit_id: habitId, habit_name: habitName });
 });
 
@@ -402,6 +431,84 @@ app.get("/api/shared", requireAuth, (req, res) => {
 // --- Validation helpers ---
 const isValidDate = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const isValidMonth = (s) => typeof s === "string" && /^\d{4}-\d{2}$/.test(s);
+
+// --- Commentaires d'un lecteur sur une habitude partagée ---
+
+// Vérifie que `viewerId` a accès en lecture à `habitId` (partage all ou ciblé).
+function canViewHabit(habitId, viewerId) {
+  const habit = db.prepare("SELECT id, name, user_id FROM habits WHERE id = ?").get(habitId);
+  if (!habit) return null;
+  if (habit.user_id === viewerId) return { habit, isOwner: true };
+  const share = db
+    .prepare(
+      "SELECT 1 FROM shares WHERE owner_id = ? AND viewer_id = ? AND (habit_id IS NULL OR habit_id = ?)"
+    )
+    .get(habit.user_id, viewerId, habitId);
+  return share ? { habit, isOwner: false } : null;
+}
+
+// Lire les commentaires partagés d'une habitude pour un jour.
+app.get("/api/shared-comments", requireAuth, (req, res) => {
+  const habitId = Number(req.query.habit_id);
+  const date = req.query.date;
+  if (!habitId || !isValidDate(date)) return res.status(400).json({ error: "habit_id et date requis" });
+  const acc = canViewHabit(habitId, req.user.id);
+  if (!acc) return res.status(403).json({ error: "Accès non autorisé" });
+
+  const rows = db
+    .prepare(
+      `SELECT c.text, c.author_id, u.email AS author
+       FROM shared_comments c JOIN users u ON u.id = c.author_id
+       WHERE c.habit_id = ? AND c.date = ? ORDER BY c.created_at`
+    )
+    .all(habitId, date);
+
+  // Le propriétaire voit tout ; un lecteur ne voit que son propre commentaire.
+  const visible = acc.isOwner ? rows : rows.filter((r) => r.author_id === req.user.id);
+  res.json({
+    isOwner: acc.isOwner,
+    mine: (rows.find((r) => r.author_id === req.user.id) || {}).text || "",
+    comments: visible.map((r) => ({ author: r.author, text: r.text, mine: r.author_id === req.user.id })),
+  });
+});
+
+// Ajouter / modifier / supprimer son commentaire sur une habitude partagée.
+app.put("/api/shared-comments", requireAuth, (req, res) => {
+  const habitId = Number(req.body?.habit_id);
+  const date = req.body?.date;
+  const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+  if (!habitId || !isValidDate(date)) return res.status(400).json({ error: "habit_id et date requis" });
+
+  const acc = canViewHabit(habitId, req.user.id);
+  if (!acc) return res.status(403).json({ error: "Accès non autorisé" });
+  if (acc.isOwner)
+    return res.status(400).json({ error: "Utilisez les commentaires normaux sur vos propres habitudes" });
+
+  if (text === "") {
+    db.prepare("DELETE FROM shared_comments WHERE habit_id = ? AND date = ? AND author_id = ?").run(
+      habitId, date, req.user.id
+    );
+    return res.json({ text: "" });
+  }
+
+  db.prepare(
+    `INSERT INTO shared_comments (habit_id, date, author_id, text) VALUES (?, ?, ?, ?)
+     ON CONFLICT(habit_id, date, author_id) DO UPDATE SET text = excluded.text`
+  ).run(habitId, date, req.user.id, text);
+
+  // Notifie le propriétaire (non lu).
+  logActivity(acc.habit.user_id, {
+    actor: req.user.email,
+    type: "shared_comment",
+    habitId,
+    habitName: acc.habit.name,
+    date,
+    detail: text,
+    read: 0,
+  });
+
+  res.json({ text });
+});
 
 // Normalise un masque de jours en chaîne de 7 caractères ('1'/'0'),
 // indexée par getDay() (0 = dimanche ... 6 = samedi).
@@ -487,6 +594,7 @@ app.post("/api/habits", requireAuth, (req, res) => {
   const habit = db
     .prepare("SELECT * FROM habits WHERE id = ?")
     .get(info.lastInsertRowid);
+  logActivity(req.user.id, { type: "created", habitId: habit.id, habitName: habit.name });
   res.status(201).json(habit);
 });
 
@@ -532,10 +640,12 @@ app.put("/api/habits/:id", requireAuth, (req, res) => {
 // Delete a habit (and its logs via cascade)
 app.delete("/api/habits/:id", requireAuth, (req, res) => {
   const id = Number(req.params.id);
+  const existing = db.prepare("SELECT name FROM habits WHERE id = ? AND user_id = ?").get(id, req.user.id);
   const info = db
     .prepare("DELETE FROM habits WHERE id = ? AND user_id = ?")
     .run(id, req.user.id);
   if (info.changes === 0) return res.status(404).json({ error: "Habitude introuvable" });
+  logActivity(req.user.id, { type: "deleted", habitName: existing.name });
   res.status(204).end();
 });
 
@@ -571,7 +681,7 @@ app.post("/api/logs/set", requireAuth, (req, res) => {
     return res.status(400).json({ error: "status doit être done, missed ou none" });
 
   const habit = db
-    .prepare("SELECT id FROM habits WHERE id = ? AND user_id = ?")
+    .prepare("SELECT id, name FROM habits WHERE id = ? AND user_id = ?")
     .get(habitId, req.user.id);
   if (!habit) return res.status(404).json({ error: "Habitude introuvable" });
 
@@ -583,6 +693,7 @@ app.post("/api/logs/set", requireAuth, (req, res) => {
        ON CONFLICT(habit_id, date) DO UPDATE SET status = excluded.status`
     ).run(habitId, date, status);
   }
+  logActivity(req.user.id, { type: status, habitId, habitName: habit.name, date });
   res.json({ habit_id: habitId, date, status });
 });
 

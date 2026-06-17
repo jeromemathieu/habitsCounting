@@ -75,6 +75,36 @@ db.exec(`
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS activity (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,          -- destinataire (propriétaire du flux)
+    actor      TEXT NOT NULL DEFAULT '',  -- 'Vous' ou email de l'auteur
+    type       TEXT NOT NULL,
+    habit_id   INTEGER,
+    habit_name TEXT,
+    date       TEXT,
+    detail     TEXT,
+    read       INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_activity_user ON activity(user_id, id);
+
+  CREATE TABLE IF NOT EXISTS shared_comments (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    habit_id   INTEGER NOT NULL,
+    date       TEXT NOT NULL,
+    author_id  INTEGER NOT NULL,
+    text       TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (habit_id)  REFERENCES habits(id) ON DELETE CASCADE,
+    FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE (habit_id, date, author_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_shared_comments ON shared_comments(habit_id, date);
 `);
 
 // Réglage par défaut : autoriser les inscriptions.
