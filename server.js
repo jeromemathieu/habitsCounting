@@ -166,6 +166,52 @@ app.put("/api/auth/password", requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// --- Recherche de commentaires ---
+// kind = 'mine' (laissés par moi : mes notes + mes commentaires sur des habitudes
+// partagées) ou 'received' (laissés par d'autres sur mes habitudes).
+app.get("/api/comments", requireAuth, (req, res) => {
+  const kind = req.query.kind === "received" ? "received" : "mine";
+  const month = typeof req.query.month === "string" && /^\d{4}-\d{2}$/.test(req.query.month) ? req.query.month : null;
+  const q = String(req.query.q || "").trim().toLowerCase();
+  const like = month ? `${month}-%` : "%";
+  let items = [];
+
+  if (kind === "mine") {
+    const own = db
+      .prepare(
+        `SELECT h.name AS habit_name, n.date, n.text FROM notes n
+         JOIN habits h ON h.id = n.habit_id
+         WHERE h.user_id = ? AND n.date LIKE ?`
+      )
+      .all(req.user.id, like)
+      .map((r) => ({ scope: "note", ...r }));
+    const shared = db
+      .prepare(
+        `SELECT h.name AS habit_name, c.date, c.text, ow.email AS owner FROM shared_comments c
+         JOIN habits h ON h.id = c.habit_id
+         JOIN users ow ON ow.id = h.user_id
+         WHERE c.author_id = ? AND c.date LIKE ?`
+      )
+      .all(req.user.id, like)
+      .map((r) => ({ scope: "shared", ...r }));
+    items = [...own, ...shared];
+  } else {
+    items = db
+      .prepare(
+        `SELECT h.name AS habit_name, c.date, c.text, u.email AS author FROM shared_comments c
+         JOIN habits h ON h.id = c.habit_id
+         JOIN users u ON u.id = c.author_id
+         WHERE h.user_id = ? AND c.date LIKE ?`
+      )
+      .all(req.user.id, like)
+      .map((r) => ({ scope: "received", ...r }));
+  }
+
+  if (q) items = items.filter((i) => i.text.toLowerCase().includes(q));
+  items.sort((a, b) => b.date.localeCompare(a.date));
+  res.json(items);
+});
+
 // --- Journal d'activité ---
 
 app.get("/api/activity", requireAuth, (req, res) => {

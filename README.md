@@ -102,7 +102,7 @@ Lecture le week-end », « coche Sport pour hier », « mes stats de mai »…
 
 **Outils disponibles** : `list_habits`, `add_habit`, `mark_habit`,
 `day_status`, `monthly_summary`, `yearly_stats`, `add_note`,
-`notifications`, `recent_activity`.
+`notifications`, `recent_activity`, `search_comments`.
 
 Il s'authentifie auprès de l'API avec un compte utilisateur normal :
 

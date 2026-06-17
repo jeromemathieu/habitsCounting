@@ -353,6 +353,34 @@ server.registerTool(
   }
 );
 
+server.registerTool(
+  "search_comments",
+  {
+    title: "Rechercher des commentaires",
+    description:
+      "Recherche les commentaires : ceux que TU as laissés (mine — tes notes + tes commentaires sur des habitudes partagées) ou ceux REÇUS d'autres personnes sur tes habitudes (received). Filtrable par mois et par texte.",
+    inputSchema: {
+      kind: z.enum(["mine", "received"]).optional().describe("mine = laissés par moi (défaut), received = reçus"),
+      month: z.string().regex(/^\d{4}-\d{2}$/).optional().describe("Mois YYYY-MM (optionnel)"),
+      query: z.string().optional().describe("Filtre texte (optionnel)"),
+    },
+  },
+  async ({ kind = "mine", month, query }) => {
+    const params = new URLSearchParams({ kind });
+    if (month) params.set("month", month);
+    if (query) params.set("q", query);
+    const items = await api("/api/comments?" + params.toString());
+    if (!items.length) return text("Aucun commentaire trouvé.");
+    const lines = items.map((c) => {
+      if (c.scope === "received") return `- ${c.date} · ${c.habit_name} — ${c.author} : ${c.text}`;
+      if (c.scope === "shared") return `- ${c.date} · ${c.habit_name} (de ${c.owner}) : ${c.text}`;
+      return `- ${c.date} · ${c.habit_name} : ${c.text}`;
+    });
+    const head = kind === "received" ? "Commentaires reçus" : "Tes commentaires";
+    return text(`${head} (${items.length}) :\n${lines.join("\n")}`);
+  }
+);
+
 // --- Démarrage ---
 const transport = new StdioServerTransport();
 await server.connect(transport);
