@@ -301,6 +301,58 @@ server.registerTool(
   }
 );
 
+// --- Activité / notifications ---
+const ACT_FR = {
+  created: (a) => `✨ Habitude créée : ${a.habit_name}`,
+  deleted: (a) => `🗑️ Habitude supprimée : ${a.habit_name}`,
+  done: (a) => `✅ ${a.habit_name} — fait le ${a.date}`,
+  missed: (a) => `❌ ${a.habit_name} — pas fait le ${a.date}`,
+  none: (a) => `↺ ${a.habit_name} — remis à zéro le ${a.date}`,
+  share_added: (a) => `👥 ${a.detail}`,
+  shared_comment: (a) => `💬 ${a.actor} a commenté ${a.habit_name} (${a.date}) : ${a.detail}`,
+};
+const actLine = (a) => (ACT_FR[a.type] ? ACT_FR[a.type](a) : a.detail || a.type);
+
+server.registerTool(
+  "notifications",
+  {
+    title: "Notifications non lues",
+    description:
+      "Affiche les notifications non lues (ex. commentaires reçus sur une habitude partagée). Peut les marquer comme lues.",
+    inputSchema: {
+      mark_read: z.boolean().optional().describe("Marquer les notifications comme lues (défaut : false)"),
+    },
+  },
+  async ({ mark_read = false }) => {
+    const { unread, items } = await api("/api/activity");
+    const unreadItems = items.filter((i) => !i.read);
+    if (mark_read && unread) await api("/api/activity/read", { method: "POST" });
+    if (!unread) return text("Aucune notification non lue. 🎉");
+    const lines = unreadItems.map((a) => `- ${actLine(a)}`);
+    return text(
+      `${unread} notification(s) non lue(s) :\n${lines.join("\n")}` +
+        (mark_read ? "\n(marquées comme lues)" : "")
+    );
+  }
+);
+
+server.registerTool(
+  "recent_activity",
+  {
+    title: "Activité récente",
+    description: "Liste les dernières activités sur tes habitudes (journal).",
+    inputSchema: {
+      limit: z.number().int().min(1).max(50).optional().describe("Nombre d'entrées (défaut 15)"),
+    },
+  },
+  async ({ limit = 15 }) => {
+    const { items } = await api("/api/activity");
+    if (!items.length) return text("Aucune activité.");
+    const lines = items.slice(0, limit).map((a) => `- ${actLine(a)}`);
+    return text(lines.join("\n"));
+  }
+);
+
 // --- Démarrage ---
 const transport = new StdioServerTransport();
 await server.connect(transport);
