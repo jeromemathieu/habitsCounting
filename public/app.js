@@ -1264,6 +1264,10 @@ async function renderManage() {
     name.addEventListener("keydown", (e) => {
       if (e.key === "Enter") name.blur();
     });
+    // Suggère un emoji en modifiant le nom, sans écraser un emoji déjà choisi.
+    name.addEventListener("input", () => {
+      if (!icon.value.trim()) icon.value = suggestEmoji(name.value);
+    });
     color.addEventListener("change", save);
     start.addEventListener("change", save);
     end.addEventListener("change", save);
