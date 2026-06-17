@@ -27,23 +27,28 @@
 
     <header class="app-header">
       <div class="header-top">
-        <h1>✅ Suivi des habitudes</h1>
+        <button id="menu-toggle" class="menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="Menu">
+          <span class="menu-ico">☰</span>
+          <span id="menu-current">Jour</span>
+          <span id="activity-badge" class="tab-badge hidden"></span>
+        </button>
         <div class="header-actions">
           <span id="user-email" class="user-email"></span>
           <button id="theme-toggle" class="theme-toggle" aria-label="Changer de thème" title="Changer de thème">🌙</button>
           <button id="logout-btn" class="theme-toggle" aria-label="Se déconnecter" title="Se déconnecter">⏻</button>
         </div>
       </div>
-      <nav class="tabs">
+      <nav id="menu" class="menu hidden">
         <button class="tab active" data-view="day"><span class="tab-ico">☀️</span>Jour</button>
         <button class="tab" data-view="calendar"><span class="tab-ico">📅</span>Calendrier</button>
         <button class="tab" data-view="month"><span class="tab-ico">📊</span>Mois</button>
         <button class="tab" data-view="synthese"><span class="tab-ico">📈</span>Synthèse</button>
         <button class="tab" data-view="shared"><span class="tab-ico">👥</span>Partagé</button>
-        <button class="tab" data-view="activity"><span class="tab-ico">🔔</span>Activité<span id="activity-badge" class="tab-badge hidden"></span></button>
+        <button class="tab" data-view="activity"><span class="tab-ico">🔔</span>Activité</button>
         <button class="tab" data-view="manage"><span class="tab-ico">⚙️</span>Habitudes</button>
         <button class="tab" data-view="account"><span class="tab-ico">👤</span>Compte</button>
       </nav>
+      <div id="menu-overlay" class="menu-overlay hidden"></div>
     </header>
 
     <main>

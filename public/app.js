@@ -146,7 +146,25 @@ $("#theme-toggle").addEventListener("click", () => {
 const cssVar = (name) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-// --- Tabs ---
+// --- Menu de navigation ---
+function closeMenu() {
+  $("#menu").classList.add("hidden");
+  $("#menu-overlay").classList.add("hidden");
+  $("#menu-toggle").setAttribute("aria-expanded", "false");
+}
+function openMenu() {
+  $("#menu").classList.remove("hidden");
+  $("#menu-overlay").classList.remove("hidden");
+  $("#menu-toggle").setAttribute("aria-expanded", "true");
+}
+$("#menu-toggle").addEventListener("click", () => {
+  $("#menu").classList.contains("hidden") ? openMenu() : closeMenu();
+});
+$("#menu-overlay").addEventListener("click", closeMenu);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeMenu();
+});
+
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
@@ -154,6 +172,9 @@ document.querySelectorAll(".tab").forEach((tab) => {
     tab.classList.add("active");
     const view = tab.dataset.view;
     $("#view-" + view).classList.add("active");
+    // Met à jour le libellé du bouton menu et referme le menu
+    $("#menu-current").innerHTML = tab.innerHTML;
+    closeMenu();
     if (view === "day") renderDay();
     if (view === "calendar") renderCalendar();
     if (view === "month") renderMonth();
@@ -1401,6 +1422,8 @@ function enterApp(user) {
   document.body.classList.add("authed");
   currentUserEmail = user.email;
   $("#user-email").textContent = user.email;
+  const active = document.querySelector(".tab.active");
+  if (active) $("#menu-current").innerHTML = active.innerHTML;
   renderDay();
   refreshActivityBadge();
 }

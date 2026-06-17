@@ -153,37 +153,73 @@ body {
 }
 .theme-toggle:hover { border-color: var(--primary); }
 
-.tabs {
-  display: flex;
-  gap: 0.35rem;
-  overflow-x: auto;
-  scrollbar-width: none; /* Firefox */
-  padding: 0.15rem 0 0.2rem;
-}
-.tabs::-webkit-scrollbar { display: none; } /* Chrome/Safari */
-
-.tab {
-  flex: 0 0 auto;
+/* Bouton menu (☰ + vue courante) */
+.menu-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  white-space: nowrap;
-  background: none;
-  border: 1px solid transparent;
+  gap: 0.5rem;
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 0.42rem 0.8rem;
-  font-size: 0.92rem;
+  padding: 0.4rem 0.85rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
   cursor: pointer;
-  color: var(--muted);
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: border-color 0.15s ease;
 }
-.tab:hover { background: var(--primary-soft); color: var(--text); }
-.tab-ico { font-size: 0.95em; line-height: 1; }
+.menu-toggle:hover { border-color: var(--primary); }
+.menu-ico { font-size: 1.1rem; line-height: 1; }
+#menu-current { text-transform: capitalize; }
+#menu-current .tab-ico { margin-right: 0.15rem; }
+
+/* Menu déroulant */
+.menu {
+  position: absolute;
+  top: calc(100% - 0.3rem);
+  left: 1rem;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 220px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 30px -8px rgba(15, 17, 26, 0.3);
+  padding: 0.4rem;
+  animation: menuIn 0.15s ease;
+}
+@keyframes menuIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+.menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: transparent;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 9px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  color: var(--text);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.tab:hover { background: var(--primary-soft); }
+.tab-ico { font-size: 1.05em; line-height: 1; width: 1.4em; text-align: center; }
 
 .tab.active {
   color: var(--primary);
   background: var(--primary-soft);
-  border-color: color-mix(in srgb, var(--primary) 25%, transparent);
   font-weight: 600;
 }
 
