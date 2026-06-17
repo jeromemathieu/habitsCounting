@@ -73,6 +73,46 @@ function buildDaysPicker(container, mask, onChange) {
 const maskToDays = (mask) =>
   mask.split("").map((c, i) => (c === "1" ? i : -1)).filter((i) => i >= 0);
 
+// Nom d'une habitude préfixé de son emoji (pour l'affichage).
+const habitName = (h) => (h.icon ? h.icon + " " : "") + h.name;
+
+// Suggestion d'emoji selon le nom (mots-clés FR/EN simples).
+const EMOJI_KEYWORDS = [
+  [/sport|gym|muscu|fitness|workout|s[ée]ance/i, "🏋️"],
+  [/cours|run|jog|footing|marche|march|walk/i, "🏃"],
+  [/v[ée]lo|bike|cycl/i, "🚴"],
+  [/nat|swim|piscine|nage/i, "🏊"],
+  [/yoga|m[ée]dit|relax|respir/i, "🧘"],
+  [/lect|lire|livre|book|read/i, "📖"],
+  [/[ée]cri|journal|diary|write|blog/i, "✍️"],
+  [/eau|water|boire|hydrat/i, "💧"],
+  [/sommeil|dormir|sleep|coucher/i, "😴"],
+  [/r[ée]veil|lever|matin/i, "⏰"],
+  [/manger|repas|cuisine|cook|food|fruit|l[ée]gume|sain/i, "🥗"],
+  [/caf[ée]|coffee/i, "☕"],
+  [/m[ée]dic|pilule|vitamine|sant[ée]/i, "💊"],
+  [/dent|brosse/i, "🦷"],
+  [/argent|budget|[ée]pargne|money|finance/i, "💰"],
+  [/travail|work|boulot|bureau|t[âa]che/i, "💼"],
+  [/[ée]tud|appr|learn|formation|langue|anglais/i, "🎓"],
+  [/code|dev|program|projet/i, "💻"],
+  [/musi|guitare|piano|chant/i, "🎵"],
+  [/m[ée]nage|ranger|nettoy|clean/i, "🧹"],
+  [/jardin|plante|arros/i, "🪴"],
+  [/famille|enfant|appel|t[ée]l[ée]phon|call/i, "📞"],
+  [/gratitude|merci|positif/i, "🙏"],
+  [/photo|dessin|art|cr[ée]a/i, "🎨"],
+  [/film|s[ée]rie|tv|netflix/i, "🎬"],
+  [/jeu|game|gaming/i, "🎮"],
+  [/pri[èe]re|[ée]glise|spirit/i, "✝️"],
+  [/fum|cigarette|tabac/i, "🚭"],
+  [/sucre|gateau|sweet/i, "🍬"],
+];
+function suggestEmoji(name) {
+  for (const [re, e] of EMOJI_KEYWORDS) if (re.test(name)) return e;
+  return "";
+}
+
 // --- State ---
 let currentDate = toISODate(new Date());
 let currentMonth = currentDate.slice(0, 7);
@@ -167,7 +207,7 @@ async function renderDay() {
     main.className = "habit-main";
     main.innerHTML = `
       <span class="dot" style="background:${h.color}"></span>
-      <span class="name">${escapeHtml(h.name)}</span>
+      <span class="name">${escapeHtml(habitName(h))}</span>
     `;
     const noteBtn = document.createElement("button");
     noteBtn.className = "note-btn" + (note ? " has-note" : "");
@@ -262,7 +302,7 @@ async function renderCalendar() {
   for (const h of habits) {
     const opt = document.createElement("option");
     opt.value = h.id;
-    opt.textContent = h.name;
+    opt.textContent = habitName(h);
     if (h.id === calHabitId) opt.selected = true;
     sel.appendChild(opt);
   }
@@ -492,7 +532,7 @@ async function renderMonth() {
     row.innerHTML = `
       <div class="top">
         <span class="dot" style="background:${h.color}"></span>
-        <span class="name">${escapeHtml(h.name)}</span>
+        <span class="name">${escapeHtml(habitName(h))}</span>
         <span class="count">${h.count} / ${h.scheduled} j prévus · ${h.rate}%</span>
       </div>
       <div class="bar"><span style="width:${h.rate}%;background:${h.color}"></span></div>
@@ -549,7 +589,7 @@ function renderFilter(habits) {
     const active = selectedHabits.has(h.id);
     const chip = document.createElement("button");
     chip.className = "filter-chip" + (active ? " active" : "");
-    chip.innerHTML = `<span class="chip-dot" style="background:${active ? h.color : "var(--border)"}"></span>${escapeHtml(h.name)}`;
+    chip.innerHTML = `<span class="chip-dot" style="background:${active ? h.color : "var(--border)"}"></span>${escapeHtml(habitName(h))}`;
     chip.style.borderColor = active ? h.color : "";
     chip.addEventListener("click", () => {
       if (selectedHabits.has(h.id)) selectedHabits.delete(h.id);
@@ -621,7 +661,7 @@ function trendsChartConfig(shown, mode) {
   };
 
   const datasets = shown.map((h) => ({
-    label: h.name,
+    label: habitName(h),
     data: h.monthly.map((_, i) => valOf(h, i)),
     borderColor: h.color,
     backgroundColor: isStacked ? h.color : makeGradient(h.color),
@@ -791,7 +831,7 @@ async function drawShared() {
     html += `<li class="habit-item ${st === "done" ? "done" : st === "missed" ? "missed" : ""}" style="background:${bg}">
       <div class="habit-main" style="cursor:default">
         <span class="dot" style="background:${h.color}"></span>
-        <span class="name">${escapeHtml(h.name)}</span>
+        <span class="name">${escapeHtml(habitName(h))}</span>
         <span class="checkbox" style="${box}">${mark}</span>
       </div></li>`;
   }
@@ -802,7 +842,7 @@ async function drawShared() {
     html += `<div class="summary-row">
       <div class="top">
         <span class="dot" style="background:${h.color}"></span>
-        <span class="name">${escapeHtml(h.name)}</span>
+        <span class="name">${escapeHtml(habitName(h))}</span>
         <span class="count">${h.count} / ${h.scheduled} j prévus · ${h.rate}%</span>
       </div>
       <div class="bar"><span style="width:${h.rate}%;background:${h.color}"></span></div>
@@ -841,7 +881,7 @@ async function renderSharedCalendar() {
   for (const h of habits) {
     const o = document.createElement("option");
     o.value = h.id;
-    o.textContent = h.name;
+    o.textContent = habitName(h);
     if (h.id === sharedCalHabitId) o.selected = true;
     sel.appendChild(o);
   }
@@ -991,7 +1031,7 @@ function renderSharedFilter(habits) {
     const active = sharedSelectedHabits.has(h.id);
     const chip = document.createElement("button");
     chip.className = "filter-chip" + (active ? " active" : "");
-    chip.innerHTML = `<span class="chip-dot" style="background:${active ? h.color : "var(--border)"}"></span>${escapeHtml(h.name)}`;
+    chip.innerHTML = `<span class="chip-dot" style="background:${active ? h.color : "var(--border)"}"></span>${escapeHtml(habitName(h))}`;
     chip.style.borderColor = active ? h.color : "";
     chip.addEventListener("click", () => {
       if (sharedSelectedHabits.has(h.id)) sharedSelectedHabits.delete(h.id);
@@ -1107,7 +1147,7 @@ async function renderManage() {
   for (const h of habits) {
     const o = document.createElement("option");
     o.value = h.id;
-    o.textContent = h.name;
+    o.textContent = habitName(h);
     shareSel.appendChild(o);
   }
 
@@ -1117,6 +1157,13 @@ async function renderManage() {
 
     const top = document.createElement("div");
     top.className = "manage-top";
+
+    const icon = document.createElement("input");
+    icon.type = "text";
+    icon.maxLength = 4;
+    icon.className = "emoji-input";
+    icon.value = h.icon || "";
+    icon.placeholder = "🙂";
 
     const color = document.createElement("input");
     color.type = "color";
@@ -1155,6 +1202,7 @@ async function renderManage() {
           method: "PUT",
           body: JSON.stringify({
             name: newName,
+            icon: icon.value.trim(),
             color: color.value,
             days: maskToDays(daysWrap.dataset.mask),
             start_date: start.value || null,
@@ -1169,6 +1217,7 @@ async function renderManage() {
         return;
       }
       h.name = newName;
+      h.icon = icon.value.trim();
       h.color = color.value;
       h.days = daysWrap.dataset.mask;
       h.start_date = start.value || null;
@@ -1181,6 +1230,8 @@ async function renderManage() {
     color.addEventListener("change", save);
     start.addEventListener("change", save);
     end.addEventListener("change", save);
+    icon.addEventListener("blur", save);
+    icon.addEventListener("keydown", (e) => { if (e.key === "Enter") icon.blur(); });
 
     buildDaysPicker(daysWrap, h.days || "1111111", save);
 
@@ -1194,13 +1245,21 @@ async function renderManage() {
       renderManage();
     });
 
-    top.append(color, name, del);
+    top.append(icon, color, name, del);
     li.append(top, daysWrap, datesRow);
     list.appendChild(li);
   }
 }
 
 buildDaysPicker($("#new-habit-days"), "1111111");
+
+// Suggère un emoji pendant la saisie du nom (si le champ emoji est vide / non modifié).
+let iconEdited = false;
+$("#habit-icon").addEventListener("input", () => { iconEdited = true; });
+$("#habit-name").addEventListener("input", () => {
+  if (iconEdited) return;
+  $("#habit-icon").value = suggestEmoji($("#habit-name").value);
+});
 
 $("#habit-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -1211,6 +1270,7 @@ $("#habit-form").addEventListener("submit", async (e) => {
       method: "POST",
       body: JSON.stringify({
         name,
+        icon: $("#habit-icon").value.trim(),
         color: $("#habit-color").value,
         days: maskToDays($("#new-habit-days").dataset.mask),
         start_date: $("#habit-start").value || null,
@@ -1222,6 +1282,8 @@ $("#habit-form").addEventListener("submit", async (e) => {
     return;
   }
   $("#habit-name").value = "";
+  $("#habit-icon").value = "";
+  iconEdited = false;
   $("#habit-color").value = "#4f46e5";
   $("#habit-start").value = "";
   $("#habit-end").value = "";

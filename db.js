@@ -101,6 +101,11 @@ if (!habitCols.includes("user_id")) {
 }
 db.exec("CREATE INDEX IF NOT EXISTS idx_habits_user ON habits(user_id)");
 
+// Emoji optionnel de l'habitude.
+if (!habitCols.includes("icon")) {
+  db.exec("ALTER TABLE habits ADD COLUMN icon TEXT NOT NULL DEFAULT ''");
+}
+
 // État du log : 'done' (fait) ou 'missed' (pas fait). Pas de ligne = rien.
 // Les lignes existantes (avant cette colonne) sont des « fait ».
 const logCols = db.prepare("PRAGMA table_info(logs)").all().map((c) => c.name);

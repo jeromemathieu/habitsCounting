@@ -467,6 +467,7 @@ app.post("/api/habits", requireAuth, (req, res) => {
 
   const days = req.body?.days !== undefined ? normalizeDays(req.body.days) : "1111111";
   if (days === undefined) return res.status(400).json({ error: "Jours invalides" });
+  const icon = String(req.body?.icon || "").trim().slice(0, 8);
 
   const startDate = normalizeOptionalDate(req.body?.start_date);
   const endDate = normalizeOptionalDate(req.body?.end_date);
@@ -480,9 +481,9 @@ app.post("/api/habits", requireAuth, (req, res) => {
     .get(req.user.id).m;
   const info = db
     .prepare(
-      "INSERT INTO habits (name, color, sort_order, days, start_date, end_date, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO habits (name, color, sort_order, days, start_date, end_date, user_id, icon) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .run(name, color, maxOrder + 1, days, startDate, endDate, req.user.id);
+    .run(name, color, maxOrder + 1, days, startDate, endDate, req.user.id, icon);
   const habit = db
     .prepare("SELECT * FROM habits WHERE id = ?")
     .get(info.lastInsertRowid);
@@ -520,9 +521,11 @@ app.put("/api/habits/:id", requireAuth, (req, res) => {
   if (startDate && endDate && startDate > endDate)
     return res.status(400).json({ error: "La date de début doit précéder la date de fin" });
 
+  const icon = req.body?.icon !== undefined ? String(req.body.icon).trim().slice(0, 8) : existing.icon;
+
   db.prepare(
-    "UPDATE habits SET name = ?, color = ?, days = ?, start_date = ?, end_date = ? WHERE id = ?"
-  ).run(name, color, days, startDate, endDate, id);
+    "UPDATE habits SET name = ?, color = ?, days = ?, start_date = ?, end_date = ?, icon = ? WHERE id = ?"
+  ).run(name, color, days, startDate, endDate, icon, id);
   res.json(db.prepare("SELECT * FROM habits WHERE id = ?").get(id));
 });
 
