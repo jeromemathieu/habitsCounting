@@ -159,6 +159,7 @@ document.querySelectorAll(".tab").forEach((tab) => {
     if (view === "month") renderMonth();
     if (view === "synthese") renderSynthese();
     if (view === "shared") renderShared();
+    if (view === "activity") renderActivity();
     if (view === "manage") renderManage();
     if (view === "account") renderAccount();
   });
@@ -767,6 +768,7 @@ $("#next-year").addEventListener("click", () => { currentYear++; renderSynthese(
 
 // --- Shared view (consultation des habitudes partagées avec moi) ---
 let sharedOwnerId = null;
+let calSharedOwnerEmail = "";
 
 async function renderShared() {
   const owners = await api("/api/shared");
@@ -783,6 +785,7 @@ async function renderShared() {
   if (sharedOwnerId === null || !owners.some((o) => o.id === sharedOwnerId)) {
     sharedOwnerId = owners[0].id;
   }
+  calSharedOwnerEmail = (owners.find((o) => o.id === sharedOwnerId) || {}).email || "";
   sel.innerHTML = "";
   for (const o of owners) {
     const opt = document.createElement("option");
@@ -853,6 +856,7 @@ async function drawShared() {
 
 $("#shared-owner").addEventListener("change", (e) => {
   sharedOwnerId = Number(e.target.value);
+  calSharedOwnerEmail = e.target.selectedOptions[0]?.textContent || "";
   // Réinitialise l'état des sous-vues pour le nouveau propriétaire
   sharedCalHabitId = null;
   sharedSelectedHabits = null;
@@ -956,14 +960,10 @@ async function drawSharedCalendar() {
     if (scheduled && status === "none") dot.style.background = color;
     cell.append(num, dot);
 
-    if (notes[iso]) {
+    if (!outRange) {
       cell.style.cursor = "pointer";
-      cell.title = "Voir le commentaire";
-      cell.addEventListener("click", () => {
-        const nv = $("#shared-cal-noteview");
-        nv.classList.remove("hidden");
-        nv.innerHTML = `<strong>${frDate(iso)}</strong><br>${escapeHtml(notes[iso])}`;
-      });
+      cell.title = "Voir / commenter ce jour";
+      cell.addEventListener("click", () => openSharedDay(iso, notes[iso] || ""));
     }
     grid.appendChild(cell);
   }
@@ -975,8 +975,45 @@ async function drawSharedCalendar() {
   $("#shared-cal-legend").innerHTML = `
     <span><i class="lg-swatch" style="background:${color}"></i> Réalisé</span>
     <span><i class="lg-dot" style="background:${color}"></i> Jour prévu</span>
-    <span><i class="lg-note">💬</i> Commentaire (cliquer)</span>`;
+    <span><i class="lg-note">💬</i> Cliquer un jour pour commenter</span>`;
   $("#shared-cal-noteview").classList.add("hidden");
+}
+
+// Panneau d'un jour partagé : note du propriétaire (lecture seule) +
+// zone de commentaire du lecteur (envoyée au propriétaire).
+async function openSharedDay(iso, ownerNote) {
+  const nv = $("#shared-cal-noteview");
+  nv.classList.remove("hidden");
+  const ownerEmail = (calSharedOwnerEmail ? escapeHtml(calSharedOwnerEmail) : "le propriétaire");
+  let mine = "";
+  try {
+    const data = await api(`/api/shared-comments?habit_id=${sharedCalHabitId}&date=${iso}`);
+    mine = data.mine || "";
+  } catch {
+    /* ignore */
+  }
+  nv.innerHTML = `
+    <div class="panel-date">${frDate(iso)}</div>
+    ${ownerNote ? `<p class="shared-owner-note">📝 ${escapeHtml(ownerNote)}</p>` : ""}
+    <label class="shared-comment-label">Ton commentaire (visible par ${ownerEmail})</label>
+    <textarea id="shared-comment-input" class="panel-note" rows="2" placeholder="Laisser un mot d'encouragement…">${escapeHtml(mine)}</textarea>
+    <p id="shared-comment-msg" class="share-msg hidden"></p>
+  `;
+  const ta = $("#shared-comment-input");
+  ta.addEventListener("blur", async () => {
+    const msg = $("#shared-comment-msg");
+    try {
+      await api("/api/shared-comments", {
+        method: "PUT",
+        body: JSON.stringify({ habit_id: sharedCalHabitId, date: iso, text: ta.value.trim() }),
+      });
+      msg.textContent = ta.value.trim() ? "Commentaire envoyé ✓" : "Commentaire supprimé";
+      msg.className = "share-msg ok";
+    } catch (err) {
+      msg.textContent = err.message;
+      msg.className = "share-msg err";
+    }
+  });
 }
 
 $("#shared-cal-habit").addEventListener("change", (e) => {
@@ -1361,6 +1398,59 @@ function enterApp(user) {
   currentUserEmail = user.email;
   $("#user-email").textContent = user.email;
   renderDay();
+  refreshActivityBadge();
+}
+
+// --- Vue Activité ---
+async function refreshActivityBadge() {
+  try {
+    const { unread } = await api("/api/activity");
+    const badge = $("#activity-badge");
+    badge.textContent = unread > 9 ? "9+" : unread;
+    badge.classList.toggle("hidden", !unread);
+  } catch {
+    /* ignore */
+  }
+}
+
+const frDateTimeShort = (s) => {
+  const d = new Date((s || "").replace(" ", "T") + "Z");
+  return isNaN(d)
+    ? ""
+    : d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) +
+        " " +
+        d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+};
+
+function activityLine(it) {
+  const d = it.date ? frDate(it.date) : "";
+  switch (it.type) {
+    case "created": return `✨ Habitude créée : <b>${escapeHtml(it.habit_name || "")}</b>`;
+    case "deleted": return `🗑️ Habitude supprimée : <b>${escapeHtml(it.habit_name || "")}</b>`;
+    case "done": return `✅ <b>${escapeHtml(it.habit_name || "")}</b> — fait le ${d}`;
+    case "missed": return `❌ <b>${escapeHtml(it.habit_name || "")}</b> — pas fait le ${d}`;
+    case "none": return `↺ <b>${escapeHtml(it.habit_name || "")}</b> — remis à zéro le ${d}`;
+    case "share_added": return `👥 ${escapeHtml(it.detail || "")}`;
+    case "shared_comment":
+      return `💬 <b>${escapeHtml(it.actor || "")}</b> a commenté <b>${escapeHtml(it.habit_name || "")}</b> (${d}) : ${escapeHtml(it.detail || "")}`;
+    default: return escapeHtml(it.detail || it.type);
+  }
+}
+
+async function renderActivity() {
+  const { items } = await api("/api/activity");
+  const list = $("#activity-list");
+  list.innerHTML = "";
+  $("#activity-empty").classList.toggle("hidden", items.length > 0);
+  for (const it of items) {
+    const li = document.createElement("li");
+    li.className = "activity-item" + (it.read ? "" : " unread");
+    li.innerHTML = `<div class="activity-text">${activityLine(it)}</div><div class="activity-time">${frDateTimeShort(it.created_at)}</div>`;
+    list.appendChild(li);
+  }
+  // Marque comme lu et efface le badge
+  await api("/api/activity/read", { method: "POST" });
+  $("#activity-badge").classList.add("hidden");
 }
 
 // --- Vue Mon compte ---

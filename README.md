@@ -12,6 +12,11 @@ Application web pour **noter chaque jour les actions réalisées** et obtenir un
   autre utilisateur (par email), **toutes ou une seule** ; il les voit en
   lecture seule dans l'onglet « Partagé » (statut du jour, récap mensuel,
   calendrier et synthèse). Les écritures restent limitées à ses propres données.
+- **Emoji par habitude** : un emoji optionnel, suggéré automatiquement selon le nom.
+- **Activité & notifications** : onglet « Activité » listant les actions sur les
+  habitudes ; badge de notification quand quelqu'un commente une habitude partagée.
+- **Commentaires de lecteurs** : sur une habitude partagée, le lecteur peut
+  laisser un commentaire qui notifie le propriétaire.
 - **Mon compte** : onglet dédié pour voir son email et changer son mot de passe.
 - **Mes habitudes** : créer, renommer, recolorer et supprimer tes habitudes.
 - **Jour** : 3 états par habitude — **fait** ✓, **pas fait** ✗ ou **rien** —

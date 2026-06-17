@@ -40,6 +40,7 @@
         <button class="tab" data-view="month"><span class="tab-ico">📊</span>Mois</button>
         <button class="tab" data-view="synthese"><span class="tab-ico">📈</span>Synthèse</button>
         <button class="tab" data-view="shared"><span class="tab-ico">👥</span>Partagé</button>
+        <button class="tab" data-view="activity"><span class="tab-ico">🔔</span>Activité<span id="activity-badge" class="tab-badge hidden"></span></button>
         <button class="tab" data-view="manage"><span class="tab-ico">⚙️</span>Habitudes</button>
         <button class="tab" data-view="account"><span class="tab-ico">👤</span>Compte</button>
       </nav>
@@ -191,6 +192,12 @@
           <p id="share-msg" class="share-msg hidden"></p>
           <ul id="share-list" class="share-list"></ul>
         </div>
+      </section>
+
+      <!-- Vue Activité -->
+      <section id="view-activity" class="view">
+        <ul id="activity-list" class="activity-list"></ul>
+        <p id="activity-empty" class="empty hidden">🔕 Aucune activité pour l'instant.</p>
       </section>
 
       <!-- Vue Mon compte -->

@@ -1147,3 +1147,46 @@ input:focus, select:focus, textarea:focus {
   background: var(--card);
   color: var(--text);
 }
+
+/* Badge de notification sur l'onglet */
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Journal d'activité */
+.activity-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.activity-item {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.7rem 0.9rem;
+  box-shadow: var(--shadow);
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  align-items: flex-start;
+}
+.activity-item.unread { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); background: var(--primary-soft); }
+.activity-text { flex: 1; font-size: 0.92rem; line-height: 1.4; }
+.activity-time { color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
+
+/* Commentaire dans le calendrier partagé */
+.shared-owner-note {
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.65rem;
+  background: var(--bg);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+.shared-comment-label { display: block; font-size: 0.82rem; color: var(--muted); margin: 0.4rem 0 0.3rem; }
