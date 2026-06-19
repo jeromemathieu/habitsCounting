@@ -148,6 +148,10 @@ const userCols = db.prepare("PRAGMA table_info(users)").all().map((c) => c.name)
 if (!userCols.includes("calendar_token")) {
   db.exec("ALTER TABLE users ADD COLUMN calendar_token TEXT");
 }
+// Clé API (authentification du MCP, à la place de l'email/mot de passe).
+if (!userCols.includes("api_token")) {
+  db.exec("ALTER TABLE users ADD COLUMN api_token TEXT");
+}
 
 // Partage par habitude : recrée l'ancienne table shares (UNIQUE(owner,viewer))
 // avec une colonne habit_id (NULL = toutes), en conservant les partages existants

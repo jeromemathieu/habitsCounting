@@ -1485,7 +1485,45 @@ async function renderAccount() {
   $("#account-email").textContent = currentUserEmail;
   const { url } = await api("/api/calendar-url");
   $("#ical-url").value = url;
+  const { token } = await api("/api/api-key");
+  $("#apikey-value").value = token || "";
 }
+
+$("#apikey-copy").addEventListener("click", async () => {
+  const input = $("#apikey-value");
+  const msg = $("#apikey-msg");
+  if (!input.value) {
+    msg.textContent = "Aucune clé : génère-en une d'abord.";
+    msg.className = "share-msg err";
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(input.value);
+  } catch {
+    input.select();
+    document.execCommand("copy");
+  }
+  msg.textContent = "Clé copiée ✓";
+  msg.className = "share-msg ok";
+});
+
+$("#apikey-gen").addEventListener("click", async () => {
+  if ($("#apikey-value").value && !confirm("Régénérer la clé ? L'ancienne cessera de fonctionner.")) return;
+  const { token } = await api("/api/api-key/regenerate", { method: "POST" });
+  $("#apikey-value").value = token;
+  const msg = $("#apikey-msg");
+  msg.textContent = "Nouvelle clé générée. Copie-la, elle sert à configurer le MCP.";
+  msg.className = "share-msg ok";
+});
+
+$("#apikey-revoke").addEventListener("click", async () => {
+  if (!confirm("Révoquer la clé API ? Le MCP qui l'utilise ne fonctionnera plus.")) return;
+  await api("/api/api-key", { method: "DELETE" });
+  $("#apikey-value").value = "";
+  const msg = $("#apikey-msg");
+  msg.textContent = "Clé révoquée.";
+  msg.className = "share-msg ok";
+});
 
 $("#ical-copy").addEventListener("click", async () => {
   const input = $("#ical-url");

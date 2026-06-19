@@ -104,13 +104,17 @@ Lecture le week-end », « coche Sport pour hier », « mes stats de mai »…
 `day_status`, `monthly_summary`, `yearly_stats`, `add_note`,
 `notifications`, `recent_activity`, `search_comments`.
 
-Il s'authentifie auprès de l'API avec un compte utilisateur normal :
+Authentification (au choix) :
 
-| Variable          | Description                                    |
-| ----------------- | ---------------------------------------------- |
-| `HABITS_URL`      | URL de l'app (défaut `http://localhost:3000`)  |
-| `HABITS_EMAIL`    | Email du compte                                |
-| `HABITS_PASSWORD` | Mot de passe du compte                         |
+| Variable          | Description                                                   |
+| ----------------- | ------------------------------------------------------------- |
+| `HABITS_URL`      | URL de l'app (défaut `http://localhost:3000`)                 |
+| `HABITS_API_KEY`  | **Clé API** (recommandé) — à générer dans « Mon compte »      |
+| `HABITS_EMAIL`    | Email du compte (si pas de clé API)                          |
+| `HABITS_PASSWORD` | Mot de passe du compte (si pas de clé API)                  |
+
+La clé API évite de stocker ton mot de passe : génère-la depuis l'onglet
+**Mon compte → Clé API (MCP)**, puis renseigne `HABITS_API_KEY`.
 
 Exemple de configuration (Claude Desktop `claude_desktop_config.json`, ou
 `.mcp.json` pour Claude Code) :

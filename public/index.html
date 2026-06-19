@@ -235,6 +235,20 @@
           </p>
           <p id="ical-msg" class="share-msg hidden"></p>
         </div>
+        <div class="share-section">
+          <h2 class="share-title">Clé API (MCP)</h2>
+          <p class="share-help">Pour connecter le serveur MCP sans mettre ton mot de passe : génère une clé et utilise-la via <code>HABITS_API_KEY</code>. Garde-la secrète ; tu peux la régénérer (l'ancienne cesse alors de fonctionner).</p>
+          <div class="ical-row">
+            <input type="text" id="apikey-value" readonly placeholder="Aucune clé générée" />
+            <button type="button" id="apikey-copy">Copier</button>
+          </div>
+          <p class="share-help" style="margin-top:0.6rem">
+            <button type="button" id="apikey-gen" class="link-btn">Générer / régénérer</button>
+            &nbsp;·&nbsp;
+            <button type="button" id="apikey-revoke" class="link-btn">Révoquer</button>
+          </p>
+          <p id="apikey-msg" class="share-msg hidden"></p>
+        </div>
       </section>
     </main>
 

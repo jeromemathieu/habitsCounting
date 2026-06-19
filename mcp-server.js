@@ -6,25 +6,26 @@
  * (Claude Desktop, Claude Code...) : consulter les stats, ajouter des
  * habitudes, les compter, cocher des jours, ajouter des commentaires.
  *
- * Il s'authentifie auprès de l'API REST avec un compte utilisateur normal :
+ * Authentification (au choix) :
+ *   HABITS_API_KEY  clé API (recommandé) — en-tête X-API-Key
+ *   ou HABITS_EMAIL + HABITS_PASSWORD (connexion par session)
  *   HABITS_URL      URL de l'app (défaut http://localhost:3000)
- *   HABITS_EMAIL    email du compte
- *   HABITS_PASSWORD mot de passe du compte
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
 const BASE_URL = (process.env.HABITS_URL || "http://localhost:3000").replace(/\/$/, "");
+const API_KEY = process.env.HABITS_API_KEY;
 const EMAIL = process.env.HABITS_EMAIL;
 const PASSWORD = process.env.HABITS_PASSWORD;
 
-if (!EMAIL || !PASSWORD) {
-  console.error("HABITS_EMAIL et HABITS_PASSWORD sont requis.");
+if (!API_KEY && !(EMAIL && PASSWORD)) {
+  console.error("Fournis HABITS_API_KEY, ou bien HABITS_EMAIL + HABITS_PASSWORD.");
   process.exit(1);
 }
 
-// --- Client HTTP avec session (cookie sid) ---
+// --- Client HTTP : clé API (X-API-Key) ou session (cookie sid) ---
 let sessionCookie = null;
 
 async function login() {
@@ -44,16 +45,15 @@ async function login() {
 }
 
 async function api(path, opts = {}, retry = true) {
-  if (!sessionCookie) await login();
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      Cookie: sessionCookie,
-      ...(opts.headers || {}),
-    },
-  });
-  if (res.status === 401 && retry) {
+  const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
+  if (API_KEY) {
+    headers["X-API-Key"] = API_KEY; // pas de login nécessaire
+  } else {
+    if (!sessionCookie) await login();
+    headers.Cookie = sessionCookie;
+  }
+  const res = await fetch(`${BASE_URL}${path}`, { ...opts, headers });
+  if (res.status === 401 && retry && !API_KEY) {
     sessionCookie = null; // session expirée : on se reconnecte une fois
     return api(path, opts, false);
   }

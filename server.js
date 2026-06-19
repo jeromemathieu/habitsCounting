@@ -32,11 +32,18 @@ app.set("trust proxy", 1); // derrière Traefik : pour détecter HTTPS (cookie S
 app.use(express.json());
 app.use(express.static(join(__dirname, "public")));
 
-// Attache l'utilisateur courant (si session valide) à chaque requête.
+// Attache l'utilisateur courant : session (cookie) OU clé API (en-tête X-API-Key).
 app.use((req, res, next) => {
   const token = parseCookies(req)[SESSION_COOKIE];
   req.sessionToken = token || null;
   req.user = getSessionUser(token);
+  if (!req.user) {
+    const apiKey = req.get("x-api-key") || (req.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    if (apiKey) {
+      const u = db.prepare("SELECT id, email FROM users WHERE api_token = ?").get(apiKey);
+      if (u) req.user = u;
+    }
+  }
   next();
 });
 
@@ -164,6 +171,27 @@ app.put("/api/auth/password", requireAuth, (req, res) => {
   // Invalide les autres sessions (déconnexion des autres appareils).
   db.prepare("DELETE FROM sessions WHERE user_id = ? AND token <> ?").run(req.user.id, req.sessionToken);
   res.json({ ok: true });
+});
+
+// --- Clé API (pour le MCP) ---
+
+// Récupère la clé API courante (ou null si aucune).
+app.get("/api/api-key", requireAuth, (req, res) => {
+  const row = db.prepare("SELECT api_token FROM users WHERE id = ?").get(req.user.id);
+  res.json({ token: row.api_token || null });
+});
+
+// (Re)génère une clé API.
+app.post("/api/api-key/regenerate", requireAuth, (req, res) => {
+  const token = "hc_" + crypto.randomBytes(24).toString("hex");
+  db.prepare("UPDATE users SET api_token = ? WHERE id = ?").run(token, req.user.id);
+  res.json({ token });
+});
+
+// Révoque la clé API.
+app.delete("/api/api-key", requireAuth, (req, res) => {
+  db.prepare("UPDATE users SET api_token = NULL WHERE id = ?").run(req.user.id);
+  res.status(204).end();
 });
 
 // --- Recherche de commentaires ---
