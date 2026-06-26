@@ -1586,6 +1586,9 @@ $("#install-btn").addEventListener("click", async () => {
 
 // --- Notifications push ---
 const pushSupported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const myTimezone = (() => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch { return ""; }
+})();
 
 function urlBase64ToUint8Array(base64) {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
@@ -1611,6 +1614,11 @@ async function loadPushSettings() {
   const sub = reg ? await reg.pushManager.getSubscription() : null;
   $("#push-toggle").checked = !!sub && s.subscribed;
   $("#reminder-time").value = s.reminder_time || "";
+  $("#reminder-tz").textContent = myTimezone || s.timezone || "inconnu";
+  // Tient le fuseau de l'utilisateur à jour côté serveur (pour l'heure du rappel).
+  if (myTimezone && myTimezone !== s.timezone) {
+    api("/api/push/settings", { method: "PUT", body: JSON.stringify({ timezone: myTimezone }) }).catch(() => {});
+  }
 }
 
 $("#push-toggle").addEventListener("change", async (e) => {
@@ -1646,8 +1654,11 @@ $("#push-toggle").addEventListener("change", async (e) => {
 
 $("#reminder-time").addEventListener("change", async (e) => {
   try {
-    await api("/api/push/settings", { method: "PUT", body: JSON.stringify({ reminder_time: e.target.value || null }) });
-    pushMsg(e.target.value ? `Rappel quotidien à ${e.target.value} ✓` : "Rappel désactivé.");
+    await api("/api/push/settings", {
+      method: "PUT",
+      body: JSON.stringify({ reminder_time: e.target.value || null, timezone: myTimezone || undefined }),
+    });
+    pushMsg(e.target.value ? `Rappel quotidien à ${e.target.value} (${myTimezone}) ✓` : "Rappel désactivé.");
   } catch (err) {
     pushMsg(err.message, false);
   }

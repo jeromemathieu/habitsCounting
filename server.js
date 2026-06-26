@@ -266,18 +266,24 @@ app.post("/api/push/unsubscribe", requireAuth, (req, res) => {
 // État des notifications de l'utilisateur.
 app.get("/api/push/settings", requireAuth, (req, res) => {
   const subs = db.prepare("SELECT COUNT(*) AS c FROM push_subscriptions WHERE user_id = ?").get(req.user.id).c;
-  const u = db.prepare("SELECT reminder_time FROM users WHERE id = ?").get(req.user.id);
-  res.json({ subscribed: subs > 0, reminder_time: u.reminder_time || null });
+  const u = db.prepare("SELECT reminder_time, timezone FROM users WHERE id = ?").get(req.user.id);
+  res.json({ subscribed: subs > 0, reminder_time: u.reminder_time || null, timezone: u.timezone || null });
 });
 
-// Heure du rappel quotidien ("HH:MM" ou null pour désactiver).
+// Met à jour l'heure du rappel et/ou le fuseau (champs fournis seulement).
 app.put("/api/push/settings", requireAuth, (req, res) => {
-  let t = req.body?.reminder_time;
-  if (t === "" || t === null || t === undefined) t = null;
-  else if (typeof t !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(t))
-    return res.status(400).json({ error: "Heure invalide (HH:MM)" });
-  db.prepare("UPDATE users SET reminder_time = ? WHERE id = ?").run(t, req.user.id);
-  res.json({ reminder_time: t });
+  if (req.body?.reminder_time !== undefined) {
+    let t = req.body.reminder_time;
+    if (t === "" || t === null) t = null;
+    else if (typeof t !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(t))
+      return res.status(400).json({ error: "Heure invalide (HH:MM)" });
+    db.prepare("UPDATE users SET reminder_time = ? WHERE id = ?").run(t, req.user.id);
+  }
+  if (req.body?.timezone !== undefined && typeof req.body.timezone === "string" && req.body.timezone.length <= 64) {
+    db.prepare("UPDATE users SET timezone = ? WHERE id = ?").run(req.body.timezone, req.user.id);
+  }
+  const u = db.prepare("SELECT reminder_time, timezone FROM users WHERE id = ?").get(req.user.id);
+  res.json({ reminder_time: u.reminder_time || null, timezone: u.timezone || null });
 });
 
 // Envoi d'une notification de test.
@@ -1115,29 +1121,43 @@ app.get("/api/habits/:id/calendar", requireAuth, (req, res) => {
 });
 
 // --- Rappels quotidiens (cron simple, vérifié chaque minute) ---
-// Envoie un rappel aux utilisateurs dont l'heure correspond ET qui ont encore
-// des habitudes prévues non faites aujourd'hui. L'heure est en heure serveur.
-function localHM(d = new Date()) {
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
-function localISO(d = new Date()) {
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+// Date/heure locales d'un fuseau IANA (ex. "Europe/Paris"). Repli sur le serveur.
+function nowInTz(tz) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      hourCycle: "h23",
+      year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+    }).formatToParts(new Date());
+    const g = (t) => parts.find((p) => p.type === t).value;
+    return { date: `${g("year")}-${g("month")}-${g("day")}`, hm: `${g("hour")}:${g("minute")}` };
+  } catch {
+    const d = new Date();
+    const date = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    return { date, hm };
+  }
 }
 
 function runReminders() {
-  const now = new Date();
-  const hm = localHM(now);
-  const today = localISO(now);
-  const dow = now.getDay();
   const users = db
-    .prepare("SELECT id FROM users WHERE reminder_time = ? AND (reminder_last_sent IS NULL OR reminder_last_sent <> ?)")
-    .all(hm, today);
+    .prepare("SELECT id, reminder_time, reminder_last_sent, timezone FROM users WHERE reminder_time IS NOT NULL")
+    .all();
   for (const u of users) {
+    const { date: today, hm } = nowInTz(u.timezone || process.env.TZ || "UTC");
+    if (u.reminder_time !== hm || u.reminder_last_sent === today) continue;
     db.prepare("UPDATE users SET reminder_last_sent = ? WHERE id = ?").run(today, u.id);
-    // Habitudes prévues aujourd'hui (jour de la semaine + période) non faites.
+
+    const [Y, M, D] = today.split("-").map(Number);
+    const dow = new Date(Y, M - 1, D).getDay();
     const habits = db.prepare("SELECT * FROM habits WHERE archived = 0 AND user_id = ?").all(u.id);
     const done = new Set(
-      db.prepare("SELECT habit_id FROM logs WHERE date = ? AND status = 'done'").all(today).map((r) => r.habit_id)
+      db
+        .prepare(
+          "SELECT l.habit_id FROM logs l JOIN habits h ON h.id = l.habit_id WHERE l.date = ? AND l.status = 'done' AND h.user_id = ?"
+        )
+        .all(today, u.id)
+        .map((r) => r.habit_id)
     );
     const pending = habits.filter((h) => {
       if (h.days[dow] !== "1") return false;

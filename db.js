@@ -171,6 +171,10 @@ if (!userCols.includes("reminder_time")) {
 if (!userCols.includes("reminder_last_sent")) {
   db.exec("ALTER TABLE users ADD COLUMN reminder_last_sent TEXT");
 }
+// Fuseau horaire de l'utilisateur (IANA, ex. "Europe/Paris") pour l'heure du rappel.
+if (!userCols.includes("timezone")) {
+  db.exec("ALTER TABLE users ADD COLUMN timezone TEXT");
+}
 
 // Partage par habitude : recrée l'ancienne table shares (UNIQUE(owner,viewer))
 // avec une colonne habit_id (NULL = toutes), en conservant les partages existants
