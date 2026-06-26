@@ -1557,3 +1557,28 @@ $("#ical-regen").addEventListener("click", async () => {
     setAuthMode("login");
   }
 })();
+
+// --- PWA : service worker + installation ---
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
+
+let deferredInstallPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  $("#install-section").classList.remove("hidden");
+});
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  $("#install-section").classList.add("hidden");
+});
+$("#install-btn").addEventListener("click", async () => {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  $("#install-section").classList.add("hidden");
+});

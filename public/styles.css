@@ -1226,3 +1226,16 @@ input:focus, select:focus, textarea:focus {
   font-size: 0.9rem;
 }
 .shared-comment-label { display: block; font-size: 0.82rem; color: var(--muted); margin: 0.4rem 0 0.3rem; }
+
+/* Bouton d'installation PWA */
+.install-btn {
+  padding: 0.7rem 1.1rem;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.install-btn:hover { filter: brightness(1.08); }

@@ -36,6 +36,8 @@ Application web pour **noter chaque jour les actions réalisées** et obtenir un
 - **Synthèse** : graphique interactif (Chart.js) de l'évolution mois par mois
   sur une année, avec filtre par habitude et 3 modes (nombre, taux %,
   cumulé empilé).
+- **PWA** : installable sur mobile/desktop (icône, plein écran) avec un
+  service worker (shell en cache pour le hors-ligne ; l'API n'est jamais cachée).
 
 ## Stack
 
