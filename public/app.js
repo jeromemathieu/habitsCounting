@@ -1487,6 +1487,7 @@ async function renderAccount() {
   $("#ical-url").value = url;
   const { token } = await api("/api/api-key");
   $("#apikey-value").value = token || "";
+  loadPushSettings().catch(() => {});
 }
 
 $("#apikey-copy").addEventListener("click", async () => {
@@ -1581,4 +1582,82 @@ $("#install-btn").addEventListener("click", async () => {
   await deferredInstallPrompt.userChoice;
   deferredInstallPrompt = null;
   $("#install-section").classList.add("hidden");
+});
+
+// --- Notifications push ---
+const pushSupported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+
+function urlBase64ToUint8Array(base64) {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(b64);
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
+function pushMsg(text, ok = true) {
+  const m = $("#push-msg");
+  m.textContent = text;
+  m.className = "share-msg " + (ok ? "ok" : "err");
+}
+
+async function loadPushSettings() {
+  if (!pushSupported) {
+    $("#push-section").innerHTML =
+      '<h2 class="share-title">Notifications</h2><p class="share-help">Ton navigateur ne supporte pas les notifications push (sur iPhone, installe d\'abord l\'app via « Sur l\'écran d\'accueil »).</p>';
+    return;
+  }
+  const s = await api("/api/push/settings");
+  const reg = await navigator.serviceWorker.ready.catch(() => null);
+  const sub = reg ? await reg.pushManager.getSubscription() : null;
+  $("#push-toggle").checked = !!sub && s.subscribed;
+  $("#reminder-time").value = s.reminder_time || "";
+}
+
+$("#push-toggle").addEventListener("change", async (e) => {
+  try {
+    if (e.target.checked) {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") {
+        e.target.checked = false;
+        return pushMsg("Permission refusée par le navigateur.", false);
+      }
+      const reg = await navigator.serviceWorker.ready;
+      const { key } = await api("/api/push/key");
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(key),
+      });
+      await api("/api/push/subscribe", { method: "POST", body: JSON.stringify({ subscription: sub }) });
+      pushMsg("Notifications activées ✓");
+    } else {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await api("/api/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint: sub.endpoint }) });
+        await sub.unsubscribe();
+      }
+      pushMsg("Notifications désactivées.");
+    }
+  } catch (err) {
+    e.target.checked = false;
+    pushMsg(err.message, false);
+  }
+});
+
+$("#reminder-time").addEventListener("change", async (e) => {
+  try {
+    await api("/api/push/settings", { method: "PUT", body: JSON.stringify({ reminder_time: e.target.value || null }) });
+    pushMsg(e.target.value ? `Rappel quotidien à ${e.target.value} ✓` : "Rappel désactivé.");
+  } catch (err) {
+    pushMsg(err.message, false);
+  }
+});
+
+$("#push-test").addEventListener("click", async () => {
+  try {
+    await api("/api/push/test", { method: "POST" });
+    pushMsg("Notification de test envoyée.");
+  } catch (err) {
+    pushMsg(err.message, false);
+  }
 });

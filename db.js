@@ -105,6 +105,18 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_shared_comments ON shared_comments(habit_id, date);
+
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    endpoint   TEXT NOT NULL UNIQUE,
+    p256dh     TEXT NOT NULL,
+    auth       TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id);
 `);
 
 // Réglage par défaut : autoriser les inscriptions.
@@ -151,6 +163,13 @@ if (!userCols.includes("calendar_token")) {
 // Clé API (authentification du MCP, à la place de l'email/mot de passe).
 if (!userCols.includes("api_token")) {
   db.exec("ALTER TABLE users ADD COLUMN api_token TEXT");
+}
+// Rappel quotidien : heure "HH:MM" (NULL = désactivé) + garde anti-doublon.
+if (!userCols.includes("reminder_time")) {
+  db.exec("ALTER TABLE users ADD COLUMN reminder_time TEXT");
+}
+if (!userCols.includes("reminder_last_sent")) {
+  db.exec("ALTER TABLE users ADD COLUMN reminder_last_sent TEXT");
 }
 
 // Partage par habitude : recrée l'ancienne table shares (UNIQUE(owner,viewer))

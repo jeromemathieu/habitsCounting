@@ -83,6 +83,7 @@ docker run -p 3000:3000 -v habits-data:/data habits-counting
 | `DB_PATH`        | `./data.sqlite` | Chemin du fichier base de données                       |
 | `ADMIN_PASSWORD` | _(non défini)_  | Active la console d'admin (`/admin.html`) avec ce mot de passe unique. Non défini = console désactivée. |
 | `ADMIN_EMAIL`    | `admin`         | Identifiant de connexion de la console d'admin          |
+| `VAPID_SUBJECT`  | `mailto:admin@localhost` | Contact des notifications push (optionnel ; clés VAPID auto-générées) |
 
 > L'autorisation des inscriptions n'est plus une variable d'environnement :
 > elle se règle désormais dans la **console d'administration**.

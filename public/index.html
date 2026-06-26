@@ -223,6 +223,19 @@
           <p class="share-help">Ajoute « Habitudes » à ton écran d'accueil pour un accès rapide en plein écran.</p>
           <button type="button" id="install-btn" class="install-btn">📲 Installer l'application</button>
         </div>
+        <div class="share-section" id="push-section">
+          <h2 class="share-title">Notifications</h2>
+          <p class="share-help">Reçois un rappel quotidien et les commentaires laissés sur tes habitudes partagées.</p>
+          <label class="switch-row">
+            <input type="checkbox" id="push-toggle" />
+            <span>Activer les notifications sur cet appareil</span>
+          </label>
+          <div class="reminder-row">
+            <label>Rappel quotidien à <input type="time" id="reminder-time" /></label>
+            <button type="button" id="push-test" class="link-btn">Tester</button>
+          </div>
+          <p id="push-msg" class="share-msg hidden"></p>
+        </div>
         <div class="share-section">
           <h2 class="share-title">Changer mon mot de passe</h2>
           <p class="share-help">Tes autres appareils seront déconnectés après le changement.</p>

@@ -1,5 +1,6 @@
 import express from "express";
 import crypto from "node:crypto";
+import webpush from "web-push";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import db from "./db.js";
@@ -84,6 +85,48 @@ function getSetting(key) {
   return row ? row.value : null;
 }
 const registrationAllowed = () => getSetting("allow_registration") !== "false";
+
+function setSetting(key, value) {
+  db.prepare(
+    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+  ).run(key, value);
+}
+
+// --- Web Push : clés VAPID (auto-générées et persistées) ---
+let vapidPublicKey = null;
+(function setupVapid() {
+  let pub = getSetting("vapid_public");
+  let priv = getSetting("vapid_private");
+  if (!pub || !priv) {
+    const keys = webpush.generateVAPIDKeys();
+    pub = keys.publicKey;
+    priv = keys.privateKey;
+    setSetting("vapid_public", pub);
+    setSetting("vapid_private", priv);
+  }
+  vapidPublicKey = pub;
+  const subject = process.env.VAPID_SUBJECT || `mailto:${getAdminEmail()}@localhost`;
+  webpush.setVapidDetails(subject.startsWith("mailto:") ? subject : `mailto:${subject}`, pub, priv);
+})();
+
+// Envoie une notification push à tous les abonnements d'un utilisateur.
+async function sendPush(userId, payload) {
+  const subs = db.prepare("SELECT * FROM push_subscriptions WHERE user_id = ?").all(userId);
+  const body = JSON.stringify(payload);
+  for (const s of subs) {
+    try {
+      await webpush.sendNotification(
+        { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+        body
+      );
+    } catch (err) {
+      // Abonnement expiré/invalide : on le supprime.
+      if (err.statusCode === 404 || err.statusCode === 410) {
+        db.prepare("DELETE FROM push_subscriptions WHERE id = ?").run(s.id);
+      }
+    }
+  }
+}
 
 // Journalise une activité dans le flux d'un utilisateur.
 function logActivity(userId, { actor = "Vous", type, habitId = null, habitName = null, date = null, detail = null, read = 1 }) {
@@ -192,6 +235,59 @@ app.post("/api/api-key/regenerate", requireAuth, (req, res) => {
 app.delete("/api/api-key", requireAuth, (req, res) => {
   db.prepare("UPDATE users SET api_token = NULL WHERE id = ?").run(req.user.id);
   res.status(204).end();
+});
+
+// --- Notifications push (Web Push) ---
+
+// Clé publique VAPID (pour s'abonner côté navigateur).
+app.get("/api/push/key", requireAuth, (req, res) => {
+  res.json({ key: vapidPublicKey });
+});
+
+// Enregistre un abonnement push.
+app.post("/api/push/subscribe", requireAuth, (req, res) => {
+  const sub = req.body?.subscription;
+  if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth)
+    return res.status(400).json({ error: "Abonnement invalide" });
+  db.prepare(
+    `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)
+     ON CONFLICT(endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth`
+  ).run(req.user.id, sub.endpoint, sub.keys.p256dh, sub.keys.auth);
+  res.status(201).json({ ok: true });
+});
+
+// Supprime un abonnement.
+app.post("/api/push/unsubscribe", requireAuth, (req, res) => {
+  const endpoint = req.body?.endpoint;
+  if (endpoint) db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?").run(endpoint, req.user.id);
+  res.json({ ok: true });
+});
+
+// État des notifications de l'utilisateur.
+app.get("/api/push/settings", requireAuth, (req, res) => {
+  const subs = db.prepare("SELECT COUNT(*) AS c FROM push_subscriptions WHERE user_id = ?").get(req.user.id).c;
+  const u = db.prepare("SELECT reminder_time FROM users WHERE id = ?").get(req.user.id);
+  res.json({ subscribed: subs > 0, reminder_time: u.reminder_time || null });
+});
+
+// Heure du rappel quotidien ("HH:MM" ou null pour désactiver).
+app.put("/api/push/settings", requireAuth, (req, res) => {
+  let t = req.body?.reminder_time;
+  if (t === "" || t === null || t === undefined) t = null;
+  else if (typeof t !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(t))
+    return res.status(400).json({ error: "Heure invalide (HH:MM)" });
+  db.prepare("UPDATE users SET reminder_time = ? WHERE id = ?").run(t, req.user.id);
+  res.json({ reminder_time: t });
+});
+
+// Envoi d'une notification de test.
+app.post("/api/push/test", requireAuth, async (req, res) => {
+  await sendPush(req.user.id, {
+    title: "✅ Suivi des habitudes",
+    body: "Les notifications fonctionnent 🎉",
+    url: "/",
+  });
+  res.json({ ok: true });
 });
 
 // --- Recherche de commentaires ---
@@ -570,7 +666,7 @@ app.put("/api/shared-comments", requireAuth, (req, res) => {
      ON CONFLICT(habit_id, date, author_id) DO UPDATE SET text = excluded.text`
   ).run(habitId, date, req.user.id, text);
 
-  // Notifie le propriétaire (non lu).
+  // Notifie le propriétaire (non lu) + push.
   logActivity(acc.habit.user_id, {
     actor: req.user.email,
     type: "shared_comment",
@@ -580,6 +676,11 @@ app.put("/api/shared-comments", requireAuth, (req, res) => {
     detail: text,
     read: 0,
   });
+  sendPush(acc.habit.user_id, {
+    title: `💬 ${req.user.email}`,
+    body: `${acc.habit.name} : ${text}`,
+    url: "/",
+  }).catch(() => {});
 
   res.json({ text });
 });
@@ -1012,6 +1113,51 @@ app.get("/api/habits/:id/calendar", requireAuth, (req, res) => {
     notes,
   });
 });
+
+// --- Rappels quotidiens (cron simple, vérifié chaque minute) ---
+// Envoie un rappel aux utilisateurs dont l'heure correspond ET qui ont encore
+// des habitudes prévues non faites aujourd'hui. L'heure est en heure serveur.
+function localHM(d = new Date()) {
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+function localISO(d = new Date()) {
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+function runReminders() {
+  const now = new Date();
+  const hm = localHM(now);
+  const today = localISO(now);
+  const dow = now.getDay();
+  const users = db
+    .prepare("SELECT id FROM users WHERE reminder_time = ? AND (reminder_last_sent IS NULL OR reminder_last_sent <> ?)")
+    .all(hm, today);
+  for (const u of users) {
+    db.prepare("UPDATE users SET reminder_last_sent = ? WHERE id = ?").run(today, u.id);
+    // Habitudes prévues aujourd'hui (jour de la semaine + période) non faites.
+    const habits = db.prepare("SELECT * FROM habits WHERE archived = 0 AND user_id = ?").all(u.id);
+    const done = new Set(
+      db.prepare("SELECT habit_id FROM logs WHERE date = ? AND status = 'done'").all(today).map((r) => r.habit_id)
+    );
+    const pending = habits.filter((h) => {
+      if (h.days[dow] !== "1") return false;
+      if (h.start_date && today < h.start_date) return false;
+      if (h.end_date && today > h.end_date) return false;
+      return !done.has(h.id);
+    });
+    if (!pending.length) continue;
+    const names = pending.slice(0, 3).map((h) => (h.icon ? h.icon + " " : "") + h.name).join(", ");
+    sendPush(u.id, {
+      title: "⏰ Rappel du jour",
+      body:
+        pending.length === 1
+          ? `Il te reste : ${names}`
+          : `${pending.length} habitudes à cocher : ${names}${pending.length > 3 ? "…" : ""}`,
+      url: "/",
+    }).catch(() => {});
+  }
+}
+setInterval(runReminders, 60 * 1000);
 
 app.listen(PORT, () => {
   console.log(`Habits Counting en écoute sur http://localhost:${PORT}`);
