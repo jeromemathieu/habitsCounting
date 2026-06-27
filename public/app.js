@@ -247,6 +247,13 @@ async function renderDay() {
       check.textContent = "✗";
     }
     main.title = "Cliquer : " + { none: "marquer fait", done: "marquer pas fait", missed: "remettre à zéro" }[status];
+    if (h.reminder_time) {
+      const bell = document.createElement("span");
+      bell.className = "habit-reminder";
+      bell.textContent = `🔔 ${h.reminder_time}`;
+      bell.title = `Rappel à ${h.reminder_time}`;
+      main.append(bell);
+    }
     main.append(noteBtn, check);
 
     // Éditeur de note (déplié par le bouton 💬)

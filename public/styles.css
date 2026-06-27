@@ -1256,3 +1256,14 @@ input:focus, select:focus, textarea:focus {
   background: var(--card);
   color: var(--text);
 }
+
+/* Indicateur de rappel dans la vue Jour */
+.habit-reminder {
+  font-size: 0.78rem;
+  color: var(--muted);
+  background: var(--bg);
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
