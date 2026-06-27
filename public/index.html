@@ -248,6 +248,20 @@
           </form>
           <p id="pw-msg" class="share-msg hidden"></p>
         </div>
+        <div class="share-section" id="cal-alarm-section">
+          <h2 class="share-title">Alarmes réunions (ICS)</h2>
+          <p class="share-help">Ajoute un lien ICS (Google Agenda, Outlook, Apple…) pour recevoir une alarme push avant chaque réunion. Les notifications push doivent être activées ci-dessus.</p>
+          <form id="cal-alarm-form" class="cal-alarm-form">
+            <input type="text" id="cal-alarm-name" placeholder="Nom (ex : Travail)" maxlength="80" />
+            <input type="url" id="cal-alarm-url" placeholder="URL du calendrier (.ics)" required />
+            <div class="cal-alarm-form-row">
+              <label>Alarme <input type="number" id="cal-alarm-minutes" value="10" min="1" max="120" /> min avant</label>
+              <button type="submit">Ajouter</button>
+            </div>
+          </form>
+          <p id="cal-alarm-msg" class="share-msg hidden"></p>
+          <ul id="cal-alarm-list" class="share-list"></ul>
+        </div>
         <div class="share-section">
           <h2 class="share-title">Calendrier (Google Agenda, Apple…)</h2>
           <p class="share-help">Abonne ton agenda à cette URL pour y voir tes habitudes (✓ fait / ✗ pas fait) en lecture seule. Dans Google Agenda : « Autres agendas » → « À partir d'une URL ».</p>

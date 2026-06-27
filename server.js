@@ -1158,6 +1158,208 @@ app.get("/api/habits/:id/calendar", requireAuth, (req, res) => {
   });
 });
 
+// --- Sources de calendrier ICS (alarmes réunion) ---
+
+app.get("/api/calendar-sources", requireAuth, (req, res) => {
+  const rows = db.prepare("SELECT * FROM calendar_sources WHERE user_id = ? ORDER BY id").all(req.user.id);
+  res.json(rows);
+});
+
+app.post("/api/calendar-sources", requireAuth, (req, res) => {
+  const name = String(req.body?.name || "").trim().slice(0, 80);
+  const url = String(req.body?.url || "").trim();
+  const alarm_minutes = Math.max(1, Math.min(120, Number(req.body?.alarm_minutes) || 10));
+  if (!url || !/^https?:\/\/.+/i.test(url))
+    return res.status(400).json({ error: "URL ICS invalide" });
+  const info = db.prepare(
+    "INSERT INTO calendar_sources (user_id, name, url, alarm_minutes) VALUES (?, ?, ?, ?)"
+  ).run(req.user.id, name, url, alarm_minutes);
+  res.status(201).json(db.prepare("SELECT * FROM calendar_sources WHERE id = ?").get(info.lastInsertRowid));
+});
+
+app.put("/api/calendar-sources/:id", requireAuth, (req, res) => {
+  const id = Number(req.params.id);
+  const src = db.prepare("SELECT * FROM calendar_sources WHERE id = ? AND user_id = ?").get(id, req.user.id);
+  if (!src) return res.status(404).json({ error: "Source introuvable" });
+  const name = req.body?.name !== undefined ? String(req.body.name).trim().slice(0, 80) : src.name;
+  const url = req.body?.url !== undefined ? String(req.body.url).trim() : src.url;
+  const alarm_minutes = req.body?.alarm_minutes !== undefined
+    ? Math.max(1, Math.min(120, Number(req.body.alarm_minutes) || 10))
+    : src.alarm_minutes;
+  const enabled = req.body?.enabled !== undefined ? (req.body.enabled ? 1 : 0) : src.enabled;
+  if (!url || !/^https?:\/\/.+/i.test(url))
+    return res.status(400).json({ error: "URL ICS invalide" });
+  db.prepare("UPDATE calendar_sources SET name=?, url=?, alarm_minutes=?, enabled=? WHERE id=?")
+    .run(name, url, alarm_minutes, enabled, id);
+  // Invalide le cache en mémoire pour forcer un nouveau fetch.
+  icsCache.delete(id);
+  res.json(db.prepare("SELECT * FROM calendar_sources WHERE id = ?").get(id));
+});
+
+app.delete("/api/calendar-sources/:id", requireAuth, (req, res) => {
+  const info = db.prepare("DELETE FROM calendar_sources WHERE id = ? AND user_id = ?")
+    .run(Number(req.params.id), req.user.id);
+  if (info.changes === 0) return res.status(404).json({ error: "Source introuvable" });
+  icsCache.delete(Number(req.params.id));
+  res.status(204).end();
+});
+
+// --- Parseur ICS minimal (RFC 5545) ---
+
+// Déplie les lignes repliées (continuation = commence par espace ou tab).
+function unfoldICS(text) {
+  return text.replace(/\r?\n[ \t]/g, "");
+}
+
+// Convertit une date/heure ICS en objet Date UTC.
+// value: "20240115T100000Z" | "20240115T100000" | "20240115"
+// params: "TZID=Europe/Paris" ou ""
+function parseICSDatetime(value, params) {
+  const tzidMatch = (params || "").match(/TZID=([^;:]+)/);
+  const tzid = tzidMatch ? tzidMatch[1] : null;
+
+  if (value.endsWith("Z")) {
+    return new Date(value.replace(
+      /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/,
+      "$1-$2-$3T$4:$5:$6Z"
+    ));
+  }
+  if (/^\d{8}$/.test(value)) {
+    // Événement sur la journée entière.
+    return new Date(`${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T00:00:00Z`);
+  }
+  // Heure locale avec ou sans TZID.
+  const iso = value.replace(
+    /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/,
+    "$1-$2-$3T$4:$5:$6"
+  );
+  if (tzid) {
+    try {
+      // Approche itérative : traiter l'heure locale comme UTC, calculer le décalage.
+      const naive = new Date(iso + "Z");
+      const fmt = new Intl.DateTimeFormat("en-CA", {
+        timeZone: tzid,
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", second: "2-digit",
+        hourCycle: "h23",
+      });
+      const parts = fmt.formatToParts(naive);
+      const g = (t) => parts.find((p) => p.type === t).value;
+      const localOfNaive = new Date(`${g("year")}-${g("month")}-${g("day")}T${g("hour")}:${g("minute")}:${g("second")}Z`);
+      return new Date(naive.getTime() - (localOfNaive.getTime() - naive.getTime()));
+    } catch {
+      // Fuseau inconnu : repli sur l'heure serveur.
+    }
+  }
+  return new Date(iso);
+}
+
+// Parse le texte d'un fichier ICS et renvoie un tableau d'événements VEVENT.
+function parseICSEvents(text) {
+  const lines = unfoldICS(text).split(/\r?\n/);
+  const events = [];
+  let inEvent = false;
+  let current = {};
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (line === "BEGIN:VEVENT") { inEvent = true; current = {}; continue; }
+    if (line === "END:VEVENT") {
+      if (inEvent && current.UID && current.DTSTART) events.push(current);
+      inEvent = false;
+      continue;
+    }
+    if (!inEvent) continue;
+
+    const colonIdx = line.indexOf(":");
+    if (colonIdx < 0) continue;
+    const keyPart = line.slice(0, colonIdx);
+    const value = line.slice(colonIdx + 1);
+    const semiIdx = keyPart.indexOf(";");
+    const propName = semiIdx >= 0 ? keyPart.slice(0, semiIdx) : keyPart;
+    const params = semiIdx >= 0 ? keyPart.slice(semiIdx + 1) : "";
+
+    if (propName === "UID") current.UID = value;
+    else if (propName === "SUMMARY")
+      current.SUMMARY = value.replace(/\\n/g, "\n").replace(/\\,/g, ",").replace(/\\\\/g, "\\");
+    else if (propName === "DTSTART") current.DTSTART = parseICSDatetime(value, params);
+    else if (propName === "DTEND") current.DTEND = parseICSDatetime(value, params);
+    else if (propName === "RRULE") current.RRULE = value; // signalé mais non développé
+  }
+  return events;
+}
+
+// Cache mémoire : évite de re-fetcher l'ICS à chaque minute.
+const icsCache = new Map(); // sourceId -> { events, fetchedAt }
+const ICS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function fetchICSEvents(src) {
+  const now = Date.now();
+  const cached = icsCache.get(src.id);
+  if (cached && now - cached.fetchedAt < ICS_CACHE_TTL) return cached.events;
+
+  const resp = await fetch(src.url, {
+    signal: AbortSignal.timeout(15000),
+    headers: { "User-Agent": "HabitsCountingAlarm/1.0" },
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const text = await resp.text();
+  const events = parseICSEvents(text);
+  icsCache.set(src.id, { events, fetchedAt: now });
+  return events;
+}
+
+// Envoi des alarmes pour tous les calendriers activés.
+async function runCalendarAlarms() {
+  const sources = db.prepare("SELECT * FROM calendar_sources WHERE enabled = 1").all();
+  const now = Date.now();
+
+  for (const src of sources) {
+    try {
+      const events = await fetchICSEvents(src);
+      const alarmMs = (src.alarm_minutes || 10) * 60 * 1000;
+
+      for (const ev of events) {
+        if (!ev.DTSTART || ev.RRULE) continue; // Pas de gestion des récurrences.
+        const startMs = ev.DTSTART.getTime();
+        const msUntil = startMs - now;
+        if (msUntil <= 0 || msUntil > alarmMs) continue;
+
+        const uid = ev.UID;
+        const startIso = ev.DTSTART.toISOString();
+
+        const already = db.prepare(
+          "SELECT 1 FROM calendar_alarms_sent WHERE source_id = ? AND event_uid = ? AND event_start = ?"
+        ).get(src.id, uid, startIso);
+        if (already) continue;
+
+        db.prepare(
+          "INSERT OR IGNORE INTO calendar_alarms_sent (source_id, event_uid, event_start) VALUES (?, ?, ?)"
+        ).run(src.id, uid, startIso);
+
+        const minsUntil = Math.round(msUntil / 60000);
+        const timeLabel = ev.DTSTART.toLocaleTimeString("fr-FR", {
+          hour: "2-digit", minute: "2-digit", timeZone: "UTC",
+        });
+
+        await sendPush(src.user_id, {
+          title: `🔔 ${ev.SUMMARY || "Réunion"}`,
+          body: minsUntil <= 1 ? "C'est maintenant !" : `Dans ${minsUntil} min — ${timeLabel}`,
+          url: "/",
+          alarm: true,
+        }).catch(() => {});
+      }
+
+      if (src.last_error !== null) {
+        db.prepare("UPDATE calendar_sources SET last_error = NULL WHERE id = ?").run(src.id);
+      }
+    } catch (err) {
+      db.prepare("UPDATE calendar_sources SET last_error = ? WHERE id = ?")
+        .run(String(err.message || err).slice(0, 200), src.id);
+    }
+  }
+}
+
 // --- Rappels quotidiens (cron simple, vérifié chaque minute) ---
 // Date/heure locales d'un fuseau IANA (ex. "Europe/Paris"). Repli sur le serveur.
 function nowInTz(tz) {
@@ -1250,7 +1452,10 @@ function runReminders() {
     }
   }
 }
-setInterval(runReminders, 60 * 1000);
+setInterval(() => {
+  runReminders();
+  runCalendarAlarms().catch(() => {});
+}, 60 * 1000);
 
 app.listen(PORT, () => {
   console.log(`Habits Counting en écoute sur http://localhost:${PORT}`);

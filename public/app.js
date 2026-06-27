@@ -1506,7 +1506,101 @@ async function renderAccount() {
   const { token } = await api("/api/api-key");
   $("#apikey-value").value = token || "";
   loadPushSettings().catch(() => {});
+  renderCalendarSources().catch(() => {});
 }
+
+// --- Alarmes réunions ICS ---
+
+function calAlarmMsg(text, ok = true) {
+  const m = $("#cal-alarm-msg");
+  m.textContent = text;
+  m.className = "share-msg " + (ok ? "ok" : "err");
+}
+
+async function renderCalendarSources() {
+  const sources = await api("/api/calendar-sources");
+  const list = $("#cal-alarm-list");
+  list.innerHTML = "";
+  if (!sources.length) {
+    list.innerHTML = '<li class="share-item" style="color:var(--text-muted);font-size:0.9rem">Aucun calendrier configuré.</li>';
+    return;
+  }
+  for (const src of sources) {
+    const li = document.createElement("li");
+    li.className = "share-item";
+    const statusIcon = src.enabled ? "🔔" : "🔕";
+    const errorHint = src.last_error
+      ? `<span class="share-tag err" title="${escapeHtml(src.last_error)}">Erreur</span>`
+      : "";
+    li.innerHTML = `
+      <span class="share-email">
+        ${statusIcon} <strong>${escapeHtml(src.name || src.url)}</strong>
+        ${errorHint}
+        <small style="display:block;color:var(--text-muted);margin-top:2px">
+          ${escapeHtml(src.url.length > 50 ? src.url.slice(0, 50) + "…" : src.url)}
+          — ${src.alarm_minutes} min avant
+        </small>
+      </span>
+      <span class="share-actions">
+        <button class="link-btn cal-toggle-btn" data-id="${src.id}" data-enabled="${src.enabled}">
+          ${src.enabled ? "Désactiver" : "Activer"}
+        </button>
+        <button class="link-btn cal-delete-btn" data-id="${src.id}">Supprimer</button>
+      </span>
+    `;
+    list.appendChild(li);
+  }
+
+  list.querySelectorAll(".cal-toggle-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = Number(btn.dataset.id);
+      const nowEnabled = btn.dataset.enabled === "1";
+      try {
+        await api(`/api/calendar-sources/${id}`, {
+          method: "PUT",
+          body: JSON.stringify({ enabled: !nowEnabled }),
+        });
+        await renderCalendarSources();
+      } catch (err) {
+        calAlarmMsg(err.message, false);
+      }
+    });
+  });
+
+  list.querySelectorAll(".cal-delete-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = Number(btn.dataset.id);
+      if (!confirm("Supprimer ce calendrier ?")) return;
+      try {
+        await api(`/api/calendar-sources/${id}`, { method: "DELETE" });
+        await renderCalendarSources();
+        calAlarmMsg("Calendrier supprimé.");
+      } catch (err) {
+        calAlarmMsg(err.message, false);
+      }
+    });
+  });
+}
+
+$("#cal-alarm-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = $("#cal-alarm-name").value.trim();
+  const url = $("#cal-alarm-url").value.trim();
+  const alarm_minutes = Number($("#cal-alarm-minutes").value) || 10;
+  try {
+    await api("/api/calendar-sources", {
+      method: "POST",
+      body: JSON.stringify({ name, url, alarm_minutes }),
+    });
+    $("#cal-alarm-name").value = "";
+    $("#cal-alarm-url").value = "";
+    $("#cal-alarm-minutes").value = "10";
+    await renderCalendarSources();
+    calAlarmMsg("Calendrier ajouté ✓");
+  } catch (err) {
+    calAlarmMsg(err.message, false);
+  }
+});
 
 $("#apikey-copy").addEventListener("click", async () => {
   const input = $("#apikey-value");

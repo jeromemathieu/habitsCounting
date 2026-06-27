@@ -992,6 +992,55 @@ main {
 .share-msg.ok { color: #16a34a; }
 .share-msg.err { color: #dc2626; }
 .share-list { list-style: none; margin: 0.9rem 0 0; padding: 0; }
+.share-email { flex: 1; min-width: 0; font-size: 0.92rem; }
+.share-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+.share-tag { font-size: 0.75rem; padding: 0 0.4rem; border-radius: 4px; font-weight: 600; vertical-align: middle; }
+.share-tag.err { background: #fee2e2; color: #dc2626; }
+
+.cal-alarm-form { display: flex; flex-direction: column; gap: 0.5rem; }
+.cal-alarm-form input[type="text"],
+.cal-alarm-form input[type="url"] {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 1rem;
+  background: var(--card);
+  color: var(--text);
+  width: 100%;
+  box-sizing: border-box;
+}
+.cal-alarm-form-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.cal-alarm-form-row label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+.cal-alarm-form-row input[type="number"] {
+  width: 4.5rem;
+  padding: 0.5rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: var(--card);
+  color: var(--text);
+  text-align: center;
+}
+.cal-alarm-form-row button {
+  padding: 0.55rem 1.1rem;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+}
 .share-item {
   display: flex;
   align-items: center;
