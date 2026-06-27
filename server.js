@@ -33,8 +33,12 @@ app.set("trust proxy", 1); // derrière Traefik : pour détecter HTTPS (cookie S
 app.use(express.json());
 app.use(express.static(join(__dirname, "public")));
 
+// Origine publique du site (https://domaine), pour le sujet VAPID des push.
+let appOrigin = null;
+
 // Attache l'utilisateur courant : session (cookie) OU clé API (en-tête X-API-Key).
 app.use((req, res, next) => {
+  if (!appOrigin && req.get("host")) appOrigin = `${req.protocol}://${req.get("host")}`;
   const token = parseCookies(req)[SESSION_COOKIE];
   req.sessionToken = token || null;
   req.user = getSessionUser(token);
@@ -94,6 +98,11 @@ function setSetting(key, value) {
 
 // --- Web Push : clés VAPID (auto-générées et persistées) ---
 let vapidPublicKey = null;
+let vapidPrivateKey = null;
+// Sujet VAPID (`sub` du JWT) : doit être un mailto: ou https: VALIDE.
+// On privilégie l'URL https du site (capturée depuis les requêtes), sinon
+// VAPID_SUBJECT, puis un repli.
+let vapidSubject = process.env.VAPID_SUBJECT || null;
 (function setupVapid() {
   let pub = getSetting("vapid_public");
   let priv = getSetting("vapid_private");
@@ -105,20 +114,28 @@ let vapidPublicKey = null;
     setSetting("vapid_private", priv);
   }
   vapidPublicKey = pub;
-  const subject = process.env.VAPID_SUBJECT || `mailto:${getAdminEmail()}@localhost`;
-  webpush.setVapidDetails(subject.startsWith("mailto:") ? subject : `mailto:${subject}`, pub, priv);
+  vapidPrivateKey = priv;
 })();
+
+function currentVapidSubject() {
+  // appOrigin est rempli par le middleware ci-dessous (ex. https://habits.exemple.org).
+  return vapidSubject || appOrigin || "mailto:webpush@localhost";
+}
 
 // Envoie une notification push à tous les abonnements d'un utilisateur.
 async function sendPush(userId, payload) {
   const subs = db.prepare("SELECT * FROM push_subscriptions WHERE user_id = ?").all(userId);
   const body = JSON.stringify(payload);
   const result = { subscriptions: subs.length, sent: 0, failed: 0, error: null };
+  const options = {
+    vapidDetails: { subject: currentVapidSubject(), publicKey: vapidPublicKey, privateKey: vapidPrivateKey },
+  };
   for (const s of subs) {
     try {
       await webpush.sendNotification(
         { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-        body
+        body,
+        options
       );
       result.sent++;
     } catch (err) {
