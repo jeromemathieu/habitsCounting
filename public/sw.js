@@ -31,19 +31,14 @@ self.addEventListener("push", (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { body: event.data && event.data.text() }; }
   const title = data.title || "Suivi des habitudes";
-  const opts = {
-    body: data.body || "",
-    icon: "/icons/icon-192.png",
-    badge: "/icons/icon-192.png",
-    data: { url: data.url || "/" },
-  };
-  if (data.alarm) {
-    opts.requireInteraction = true;
-    opts.vibrate = [500, 200, 500, 200, 500];
-    opts.tag = "calendar-alarm";
-    opts.renotify = true;
-  }
-  event.waitUntil(self.registration.showNotification(title, opts));
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.body || "",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: { url: data.url || "/" },
+    })
+  );
 });
 
 // Clic sur une notification : ouvre / focalise l'app.

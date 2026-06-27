@@ -209,30 +209,4 @@ if (!shareCols.includes("habit_id")) {
   `);
 }
 
-// Sources ICS pour les alarmes de réunion.
-db.exec(`
-  CREATE TABLE IF NOT EXISTS calendar_sources (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id       INTEGER NOT NULL,
-    name          TEXT NOT NULL DEFAULT '',
-    url           TEXT NOT NULL,
-    alarm_minutes INTEGER NOT NULL DEFAULT 10,
-    enabled       INTEGER NOT NULL DEFAULT 1,
-    last_error    TEXT,
-    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-  );
-  CREATE INDEX IF NOT EXISTS idx_calendar_sources_user ON calendar_sources(user_id);
-
-  CREATE TABLE IF NOT EXISTS calendar_alarms_sent (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_id   INTEGER NOT NULL,
-    event_uid   TEXT NOT NULL,
-    event_start TEXT NOT NULL,
-    sent_at     TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (source_id) REFERENCES calendar_sources(id) ON DELETE CASCADE,
-    UNIQUE (source_id, event_uid, event_start)
-  );
-`);
-
 export default db;
