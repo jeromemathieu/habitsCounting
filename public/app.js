@@ -1247,7 +1247,12 @@ async function renderManage() {
     lblStart.append("Début ", start);
     const lblEnd = document.createElement("label");
     lblEnd.append("Fin ", end);
-    datesRow.append(lblStart, lblEnd);
+    const reminder = document.createElement("input");
+    reminder.type = "time";
+    reminder.value = h.reminder_time || "";
+    const lblRem = document.createElement("label");
+    lblRem.append("🔔 Rappel ", reminder);
+    datesRow.append(lblStart, lblEnd, lblRem);
 
     const save = async () => {
       const newName = name.value.trim();
@@ -1265,6 +1270,7 @@ async function renderManage() {
             days: maskToDays(daysWrap.dataset.mask),
             start_date: start.value || null,
             end_date: end.value || null,
+            reminder_time: reminder.value || null,
           }),
         });
       } catch (err) {
@@ -1272,6 +1278,7 @@ async function renderManage() {
         // restaure les valeurs connues
         start.value = h.start_date || "";
         end.value = h.end_date || "";
+        reminder.value = h.reminder_time || "";
         return;
       }
       h.name = newName;
@@ -1280,6 +1287,7 @@ async function renderManage() {
       h.days = daysWrap.dataset.mask;
       h.start_date = start.value || null;
       h.end_date = end.value || null;
+      h.reminder_time = reminder.value || null;
     };
     name.addEventListener("blur", save);
     name.addEventListener("keydown", (e) => {
@@ -1292,6 +1300,7 @@ async function renderManage() {
     color.addEventListener("change", save);
     start.addEventListener("change", save);
     end.addEventListener("change", save);
+    reminder.addEventListener("change", save);
     icon.addEventListener("blur", save);
     icon.addEventListener("keydown", (e) => { if (e.key === "Enter") icon.blur(); });
 
@@ -1337,6 +1346,7 @@ $("#habit-form").addEventListener("submit", async (e) => {
         days: maskToDays($("#new-habit-days").dataset.mask),
         start_date: $("#habit-start").value || null,
         end_date: $("#habit-end").value || null,
+        reminder_time: $("#habit-reminder").value || null,
       }),
     });
   } catch (err) {
@@ -1349,6 +1359,7 @@ $("#habit-form").addEventListener("submit", async (e) => {
   $("#habit-color").value = "#4f46e5";
   $("#habit-start").value = "";
   $("#habit-end").value = "";
+  $("#habit-reminder").value = "";
   buildDaysPicker($("#new-habit-days"), "1111111"); // réinitialise à « tous »
   renderManage();
 });

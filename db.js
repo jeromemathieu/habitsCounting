@@ -147,6 +147,13 @@ db.exec("CREATE INDEX IF NOT EXISTS idx_habits_user ON habits(user_id)");
 if (!habitCols.includes("icon")) {
   db.exec("ALTER TABLE habits ADD COLUMN icon TEXT NOT NULL DEFAULT ''");
 }
+// Rappel propre à l'habitude : heure "HH:MM" (NULL = pas de rappel) + garde anti-doublon.
+if (!habitCols.includes("reminder_time")) {
+  db.exec("ALTER TABLE habits ADD COLUMN reminder_time TEXT");
+}
+if (!habitCols.includes("reminder_last_sent")) {
+  db.exec("ALTER TABLE habits ADD COLUMN reminder_last_sent TEXT");
+}
 
 // État du log : 'done' (fait) ou 'missed' (pas fait). Pas de ligne = rien.
 // Les lignes existantes (avant cette colonne) sont des « fait ».

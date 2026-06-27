@@ -733,6 +733,14 @@ function normalizeDays(input) {
   return out.includes("1") ? out : "1111111"; // au moins un jour, sinon tous
 }
 
+// Valide une heure "HH:MM" optionnelle : renvoie la valeur, null si vide,
+// ou undefined si invalide.
+function normalizeReminderTime(input) {
+  if (input === undefined || input === null || input === "") return null;
+  if (typeof input === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(input)) return input;
+  return undefined;
+}
+
 // Valide une date optionnelle : renvoie la date normalisée, null si vide,
 // ou undefined si invalide.
 function normalizeOptionalDate(input) {
@@ -778,6 +786,8 @@ app.post("/api/habits", requireAuth, (req, res) => {
   const days = req.body?.days !== undefined ? normalizeDays(req.body.days) : "1111111";
   if (days === undefined) return res.status(400).json({ error: "Jours invalides" });
   const icon = String(req.body?.icon || "").trim().slice(0, 8);
+  const reminder = normalizeReminderTime(req.body?.reminder_time);
+  if (reminder === undefined) return res.status(400).json({ error: "Heure de rappel invalide (HH:MM)" });
 
   const startDate = normalizeOptionalDate(req.body?.start_date);
   const endDate = normalizeOptionalDate(req.body?.end_date);
@@ -791,9 +801,9 @@ app.post("/api/habits", requireAuth, (req, res) => {
     .get(req.user.id).m;
   const info = db
     .prepare(
-      "INSERT INTO habits (name, color, sort_order, days, start_date, end_date, user_id, icon) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO habits (name, color, sort_order, days, start_date, end_date, user_id, icon, reminder_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .run(name, color, maxOrder + 1, days, startDate, endDate, req.user.id, icon);
+    .run(name, color, maxOrder + 1, days, startDate, endDate, req.user.id, icon, reminder);
   const habit = db
     .prepare("SELECT * FROM habits WHERE id = ?")
     .get(info.lastInsertRowid);
@@ -834,9 +844,15 @@ app.put("/api/habits/:id", requireAuth, (req, res) => {
 
   const icon = req.body?.icon !== undefined ? String(req.body.icon).trim().slice(0, 8) : existing.icon;
 
+  let reminder = existing.reminder_time;
+  if (req.body?.reminder_time !== undefined) {
+    reminder = normalizeReminderTime(req.body.reminder_time);
+    if (reminder === undefined) return res.status(400).json({ error: "Heure de rappel invalide (HH:MM)" });
+  }
+
   db.prepare(
-    "UPDATE habits SET name = ?, color = ?, days = ?, start_date = ?, end_date = ?, icon = ? WHERE id = ?"
-  ).run(name, color, days, startDate, endDate, icon, id);
+    "UPDATE habits SET name = ?, color = ?, days = ?, start_date = ?, end_date = ?, icon = ?, reminder_time = ? WHERE id = ?"
+  ).run(name, color, days, startDate, endDate, icon, reminder, id);
   res.json(db.prepare("SELECT * FROM habits WHERE id = ?").get(id));
 });
 
@@ -1161,42 +1177,77 @@ function nowInTz(tz) {
   }
 }
 
+// Une habitude est-elle prévue ce jour (jour de semaine + période) ?
+function scheduledOn(h, today, dow) {
+  if (h.days[dow] !== "1") return false;
+  if (h.start_date && today < h.start_date) return false;
+  if (h.end_date && today > h.end_date) return false;
+  return true;
+}
+
 function runReminders() {
+  // Utilisateurs avec un rappel global OU au moins une habitude avec rappel.
   const users = db
-    .prepare("SELECT id, reminder_time, reminder_last_sent, timezone FROM users WHERE reminder_time IS NOT NULL")
+    .prepare(
+      `SELECT id, reminder_time, reminder_last_sent, timezone FROM users u
+       WHERE u.reminder_time IS NOT NULL
+          OR EXISTS (SELECT 1 FROM habits h WHERE h.user_id = u.id AND h.archived = 0 AND h.reminder_time IS NOT NULL)`
+    )
     .all();
+
   for (const u of users) {
     const { date: today, hm } = nowInTz(u.timezone || process.env.TZ || "UTC");
-    if (u.reminder_time !== hm || u.reminder_last_sent === today) continue;
-    db.prepare("UPDATE users SET reminder_last_sent = ? WHERE id = ?").run(today, u.id);
-
     const [Y, M, D] = today.split("-").map(Number);
     const dow = new Date(Y, M - 1, D).getDay();
-    const habits = db.prepare("SELECT * FROM habits WHERE archived = 0 AND user_id = ?").all(u.id);
-    const done = new Set(
-      db
-        .prepare(
-          "SELECT l.habit_id FROM logs l JOIN habits h ON h.id = l.habit_id WHERE l.date = ? AND l.status = 'done' AND h.user_id = ?"
-        )
-        .all(today, u.id)
-        .map((r) => r.habit_id)
-    );
-    const pending = habits.filter((h) => {
-      if (h.days[dow] !== "1") return false;
-      if (h.start_date && today < h.start_date) return false;
-      if (h.end_date && today > h.end_date) return false;
-      return !done.has(h.id);
-    });
-    if (!pending.length) continue;
-    const names = pending.slice(0, 3).map((h) => (h.icon ? h.icon + " " : "") + h.name).join(", ");
-    sendPush(u.id, {
-      title: "⏰ Rappel du jour",
-      body:
-        pending.length === 1
-          ? `Il te reste : ${names}`
-          : `${pending.length} habitudes à cocher : ${names}${pending.length > 3 ? "…" : ""}`,
-      url: "/",
-    }).catch(() => {});
+    const doneToday = () =>
+      new Set(
+        db
+          .prepare(
+            "SELECT l.habit_id FROM logs l JOIN habits h ON h.id = l.habit_id WHERE l.date = ? AND l.status = 'done' AND h.user_id = ?"
+          )
+          .all(today, u.id)
+          .map((r) => r.habit_id)
+      );
+
+    // 1) Rappel global (résumé des habitudes prévues non faites).
+    if (u.reminder_time === hm && u.reminder_last_sent !== today) {
+      db.prepare("UPDATE users SET reminder_last_sent = ? WHERE id = ?").run(today, u.id);
+      const done = doneToday();
+      const pending = db
+        .prepare("SELECT * FROM habits WHERE archived = 0 AND user_id = ?")
+        .all(u.id)
+        .filter((h) => scheduledOn(h, today, dow) && !done.has(h.id));
+      if (pending.length) {
+        const names = pending.slice(0, 3).map((h) => (h.icon ? h.icon + " " : "") + h.name).join(", ");
+        sendPush(u.id, {
+          title: "⏰ Rappel du jour",
+          body:
+            pending.length === 1
+              ? `Il te reste : ${names}`
+              : `${pending.length} habitudes à cocher : ${names}${pending.length > 3 ? "…" : ""}`,
+          url: "/",
+        }).catch(() => {});
+      }
+    }
+
+    // 2) Rappels par habitude (à leur heure propre).
+    const habitsDue = db
+      .prepare(
+        "SELECT * FROM habits WHERE archived = 0 AND user_id = ? AND reminder_time = ? AND (reminder_last_sent IS NULL OR reminder_last_sent <> ?)"
+      )
+      .all(u.id, hm, today);
+    if (habitsDue.length) {
+      const done = doneToday();
+      for (const h of habitsDue) {
+        db.prepare("UPDATE habits SET reminder_last_sent = ? WHERE id = ?").run(today, h.id);
+        if (!scheduledOn(h, today, dow) || done.has(h.id)) continue;
+        sendPush(u.id, {
+          title: `⏰ ${(h.icon ? h.icon + " " : "") + h.name}`,
+          body: "C'est l'heure ! N'oublie pas de la cocher.",
+          url: "/",
+        }).catch(() => {});
+      }
+    }
   }
 }
 setInterval(runReminders, 60 * 1000);
