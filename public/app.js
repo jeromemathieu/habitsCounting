@@ -1666,8 +1666,14 @@ $("#reminder-time").addEventListener("change", async (e) => {
 
 $("#push-test").addEventListener("click", async () => {
   try {
-    await api("/api/push/test", { method: "POST" });
-    pushMsg("Notification de test envoyée.");
+    const r = await api("/api/push/test", { method: "POST" });
+    if (r.subscriptions === 0) {
+      pushMsg("Aucun abonnement actif : active d'abord « Activer les notifications » ci-dessus.", false);
+    } else if (r.sent > 0) {
+      pushMsg(`Envoyée à ${r.sent} appareil(s). Si tu ne vois rien, vérifie les notifications du navigateur/système.`);
+    } else {
+      pushMsg(`Échec d'envoi (${r.failed}). ${r.error || ""}`.trim(), false);
+    }
   } catch (err) {
     pushMsg(err.message, false);
   }

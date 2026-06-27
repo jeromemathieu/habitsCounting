@@ -113,19 +113,24 @@ let vapidPublicKey = null;
 async function sendPush(userId, payload) {
   const subs = db.prepare("SELECT * FROM push_subscriptions WHERE user_id = ?").all(userId);
   const body = JSON.stringify(payload);
+  const result = { subscriptions: subs.length, sent: 0, failed: 0, error: null };
   for (const s of subs) {
     try {
       await webpush.sendNotification(
         { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
         body
       );
+      result.sent++;
     } catch (err) {
-      // Abonnement expiré/invalide : on le supprime.
+      result.failed++;
       if (err.statusCode === 404 || err.statusCode === 410) {
+        // Abonnement expiré/invalide : on le supprime.
         db.prepare("DELETE FROM push_subscriptions WHERE id = ?").run(s.id);
       }
+      if (!result.error) result.error = `${err.statusCode || ""} ${err.body || err.message || err}`.trim();
     }
   }
+  return result;
 }
 
 // Journalise une activité dans le flux d'un utilisateur.
@@ -286,14 +291,14 @@ app.put("/api/push/settings", requireAuth, (req, res) => {
   res.json({ reminder_time: u.reminder_time || null, timezone: u.timezone || null });
 });
 
-// Envoi d'une notification de test.
+// Envoi d'une notification de test (avec diagnostic).
 app.post("/api/push/test", requireAuth, async (req, res) => {
-  await sendPush(req.user.id, {
+  const result = await sendPush(req.user.id, {
     title: "✅ Suivi des habitudes",
     body: "Les notifications fonctionnent 🎉",
     url: "/",
   });
-  res.json({ ok: true });
+  res.json(result);
 });
 
 // --- Recherche de commentaires ---
