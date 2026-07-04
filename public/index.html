@@ -45,18 +45,20 @@
           <button id="logout-btn" class="theme-toggle" aria-label="Se déconnecter" title="Se déconnecter">⏻</button>
         </div>
       </div>
-      <nav id="menu" class="menu hidden">
-        <button class="tab active" data-view="day"><span class="tab-ico">☀️</span>Jour</button>
-        <button class="tab" data-view="calendar"><span class="tab-ico">📅</span>Calendrier</button>
-        <button class="tab" data-view="month"><span class="tab-ico">📊</span>Mois</button>
-        <button class="tab" data-view="synthese"><span class="tab-ico">📈</span>Synthèse</button>
-        <button class="tab" data-view="shared"><span class="tab-ico">👥</span>Partagé</button>
-        <button class="tab" data-view="activity"><span class="tab-ico">🔔</span>Activité</button>
-        <button class="tab" data-view="manage"><span class="tab-ico">⚙️</span>Habitudes</button>
-        <button class="tab" data-view="account"><span class="tab-ico">👤</span>Compte</button>
-      </nav>
-      <div id="menu-overlay" class="menu-overlay hidden"></div>
     </header>
+
+    <!-- Menu de navigation (hors header : backdrop-filter y piégerait position:fixed) -->
+    <nav id="menu" class="menu hidden">
+      <button class="tab active" data-view="day"><span class="tab-ico">☀️</span>Jour</button>
+      <button class="tab" data-view="calendar"><span class="tab-ico">📅</span>Calendrier</button>
+      <button class="tab" data-view="month"><span class="tab-ico">📊</span>Mois</button>
+      <button class="tab" data-view="synthese"><span class="tab-ico">📈</span>Synthèse</button>
+      <button class="tab" data-view="shared"><span class="tab-ico">👥</span>Partagé</button>
+      <button class="tab" data-view="activity"><span class="tab-ico">🔔</span>Activité</button>
+      <button class="tab" data-view="manage"><span class="tab-ico">⚙️</span>Habitudes</button>
+      <button class="tab" data-view="account"><span class="tab-ico">👤</span>Compte</button>
+    </nav>
+    <div id="menu-overlay" class="menu-overlay hidden"></div>
 
     <main>
       <!-- Vue Jour -->

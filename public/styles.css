@@ -173,10 +173,10 @@ body {
 #menu-current { text-transform: capitalize; }
 #menu-current .tab-ico { margin-right: 0.15rem; }
 
-/* Menu déroulant */
+/* Menu déroulant (élément hors header, positionné par rapport à l'écran) */
 .menu {
-  position: absolute;
-  top: calc(100% - 0.3rem);
+  position: fixed;
+  top: 4.4rem;
   left: 1rem;
   z-index: 30;
   display: flex;
