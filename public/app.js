@@ -197,25 +197,41 @@ async function renderDay() {
     api("/api/notes?date=" + currentDate),
   ]);
 
+  // On n'affiche que les habitudes prévues ce jour (jour de semaine + période),
+  // plus celles déjà marquées ce jour-là (pour ne pas masquer un enregistrement).
+  const dow = new Date(currentDate + "T00:00:00").getDay();
+  const isScheduled = (h) => {
+    if (h.days[dow] !== "1") return false;
+    if (h.start_date && currentDate < h.start_date) return false;
+    if (h.end_date && currentDate > h.end_date) return false;
+    return true;
+  };
+  const todays = habits.filter((h) => isScheduled(h) || statuses[h.id]);
+
   const list = $("#day-list");
   list.innerHTML = "";
-  $("#day-empty").classList.toggle("hidden", habits.length > 0);
+  $("#day-empty").classList.toggle("hidden", todays.length > 0);
+  if (todays.length === 0) {
+    $("#day-empty").innerHTML = habits.length
+      ? "🎉 Rien de prévu aujourd'hui."
+      : "🌱 Aucune habitude pour l'instant.<br />Ajoute-en dans l'onglet « Habitudes ».";
+  }
 
-  // Progression du jour (x faites / total)
-  const doneCount = habits.filter((h) => statuses[h.id] === "done").length;
+  // Progression du jour (x faites / total prévu)
+  const doneCount = todays.filter((h) => statuses[h.id] === "done").length;
   const prog = $("#day-progress");
-  prog.classList.toggle("hidden", habits.length === 0);
-  if (habits.length) {
-    const pct = Math.round((doneCount / habits.length) * 100);
+  prog.classList.toggle("hidden", todays.length === 0);
+  if (todays.length) {
+    const pct = Math.round((doneCount / todays.length) * 100);
     $("#day-progress-fill").style.width = pct + "%";
-    $("#day-progress-text").innerHTML = `<b>${doneCount}</b> / ${habits.length} faites`;
+    $("#day-progress-text").innerHTML = `<b>${doneCount}</b> / ${todays.length} faites`;
   }
 
   // Cycle des états : rien -> fait -> pas fait -> rien
   const NEXT = { none: "done", done: "missed", missed: "none" };
   const MISSED = "#dc2626";
 
-  for (const h of habits) {
+  for (const h of todays) {
     const status = statuses[h.id] || "none";
     const note = notes[h.id] || "";
 
