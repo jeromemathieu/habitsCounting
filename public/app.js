@@ -165,6 +165,17 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeMenu();
 });
 
+// Barre de navigation basse (mobile) : relaie vers les entrées du menu.
+document.querySelectorAll(".bnav-btn[data-view]").forEach((b) => {
+  b.addEventListener("click", () => {
+    const tab = document.querySelector(`.tab[data-view="${b.dataset.view}"]`);
+    if (tab) tab.click();
+  });
+});
+$("#bnav-more").addEventListener("click", () => {
+  $("#menu").classList.contains("hidden") ? openMenu() : closeMenu();
+});
+
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
@@ -172,8 +183,11 @@ document.querySelectorAll(".tab").forEach((tab) => {
     tab.classList.add("active");
     const view = tab.dataset.view;
     $("#view-" + view).classList.add("active");
-    // Met à jour le libellé du bouton menu et referme le menu
+    // Met à jour le libellé du bouton menu, la barre basse, et referme le menu
     $("#menu-current").innerHTML = tab.innerHTML;
+    document.querySelectorAll(".bnav-btn").forEach((b) =>
+      b.classList.toggle("active", b.dataset.view === view)
+    );
     closeMenu();
     if (view === "day") renderDay();
     if (view === "calendar") renderCalendar();

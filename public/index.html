@@ -175,12 +175,14 @@
       <!-- Vue Gestion -->
       <section id="view-manage" class="view">
         <form id="habit-form" class="habit-form">
+          <h2 class="share-title">Nouvelle habitude</h2>
           <div class="habit-form-row">
             <input type="text" id="habit-icon" class="emoji-input" maxlength="4" placeholder="🙂" title="Emoji (suggéré automatiquement)" />
             <input type="text" id="habit-name" placeholder="Nouvelle habitude (ex : Sport)" maxlength="60" required />
             <input type="color" id="habit-color" value="#4f46e5" title="Couleur" />
             <button type="submit">Ajouter</button>
           </div>
+          <div class="form-hint">Jours prévus :</div>
           <div class="days-picker" id="new-habit-days" data-mask="1111111"></div>
           <div class="habit-dates">
             <label>Début <input type="date" id="habit-start" /></label>
@@ -214,7 +216,7 @@
 
       <!-- Vue Mon compte -->
       <section id="view-account" class="view">
-        <div class="share-section" style="border-top:none;margin-top:0;padding-top:0">
+        <div class="share-section">
           <h2 class="share-title">Mon compte</h2>
           <p class="share-help">Connecté en tant que <strong id="account-email"></strong>.</p>
         </div>
@@ -277,6 +279,15 @@
         </div>
       </section>
     </main>
+
+    <!-- Navigation basse (mobile) -->
+    <nav class="bottom-nav" aria-label="Navigation principale">
+      <button class="bnav-btn active" data-view="day"><span class="bnav-ico">☀️</span>Jour</button>
+      <button class="bnav-btn" data-view="calendar"><span class="bnav-ico">📅</span>Calendrier</button>
+      <button class="bnav-btn" data-view="month"><span class="bnav-ico">📊</span>Mois</button>
+      <button class="bnav-btn" data-view="synthese"><span class="bnav-ico">📈</span>Synthèse</button>
+      <button class="bnav-btn" id="bnav-more"><span class="bnav-ico">☰</span>Plus</button>
+    </nav>
 
     <script src="vendor/chart.umd.min.js"></script>
     <script src="app.js"></script>

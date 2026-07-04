@@ -825,10 +825,20 @@ main {
 }
 
 /* Manage view */
+.form-hint {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-top: 0.2rem;
+}
 .habit-form {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.1rem 1.2rem;
   margin-bottom: 1.25rem;
 }
 .habit-form-row {
@@ -935,9 +945,12 @@ main {
 
 /* Partage */
 .share-section {
-  margin-top: 2rem;
-  padding-top: 1.25rem;
-  border-top: 1px solid var(--border);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.1rem 1.2rem;
+  margin-top: 1rem;
 }
 .share-title { font-size: 1.1rem; margin: 0 0 0.3rem; }
 .share-help { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.9rem; }
@@ -1266,4 +1279,53 @@ input:focus, select:focus, textarea:focus {
   border-radius: 999px;
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+/* --- Navigation basse (mobile) --- */
+.bottom-nav { display: none; }
+
+@media (max-width: 640px) {
+  body.authed .bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 25;
+    background: var(--header-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border);
+    padding: 0.3rem 0.4rem calc(0.3rem + env(safe-area-inset-bottom));
+    justify-content: space-around;
+  }
+  .bnav-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 0.66rem;
+    padding: 0.3rem 0;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .bnav-btn .bnav-ico { font-size: 1.3rem; line-height: 1; }
+  .bnav-btn.active { color: var(--primary); font-weight: 600; }
+
+  /* Laisse la place à la barre basse */
+  body.authed main { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
+
+  /* Menu en « bottom sheet » au-dessus de la barre */
+  .menu {
+    position: fixed;
+    top: auto;
+    bottom: calc(4.4rem + env(safe-area-inset-bottom));
+    left: 0.75rem;
+    right: 0.75rem;
+    box-shadow: 0 -8px 30px -8px rgba(15, 17, 26, 0.35);
+  }
 }
